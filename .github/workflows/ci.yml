@@ -20,3 +20,6 @@ jobs:
       - run: python -m unittest discover -s tests -q
       - run: node --test tests/test_symbol_sync.cjs
       - run: node --check order_ui/static/app.js
+      - run: node --check order_ui/static/panel-bridge.js
+      - run: node --check browser_extension/sidepanel.js
+      - run: node --check browser_extension/popup.js

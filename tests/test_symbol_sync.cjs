@@ -17,12 +17,12 @@ test('origins, tickers and stock paths are tightly scoped',()=>{
 });
 function background() {
   const local={},session={},sent=[],fetched=[];
-  const tabs=new Map([[1,{id:1,windowId:10,url:'https://www.tossinvest.com/stocks/one/order'}],[2,{id:2,windowId:10,url:'http://127.0.0.1:8765/'}],[3,{id:3,windowId:10,url:'https://www.tossinvest.com/stocks/two/order'}]]);
+  const tabs=new Map([[1,{id:1,active:true,windowId:10,url:'https://www.tossinvest.com/stocks/one/order'}],[2,{id:2,windowId:10,url:'http://127.0.0.1:8765/'}],[3,{id:3,windowId:10,url:'https://www.tossinvest.com/stocks/two/order'}]]);
   let listener,removed;
   const model={symbol:'GOOW',symbols:['GOOW','TLT'],links:[],busy:false,networkStatus:0,beforeFetch:null};
   const area=data=>({get:async key=>({[key]:data[key]}),set:async values=>Object.assign(data,values),remove:async key=>{delete data[key];}});
   const chrome={storage:{local:area(local),session:area(session)},runtime:{id:'test',getURL:path=>`chrome-extension://test/${path}`,onMessage:{addListener:fn=>{listener=fn;}}},tabs:{
-    get:async id=>{if(!tabs.has(id))throw Error('closed');return {...tabs.get(id)};},query:async options=>[...tabs.values()].filter(tab=>options.windowId === undefined || options.windowId === tab.windowId),onRemoved:{addListener:fn=>{removed=fn;}},
+    get:async id=>{if(!tabs.has(id))throw Error('closed');return {...tabs.get(id)};},query:async options=>[...tabs.values()].filter(tab=>(options.windowId === undefined || options.windowId === tab.windowId) && (!options.active || tab.active)),onRemoved:{addListener:fn=>{removed=fn;}},
     sendMessage:async(id,message)=>{
       if(!tabs.has(id))throw Error('closed');
       if(message.type==='inspect')return id===2 ? {symbol:model.symbol,symbols:model.symbols} : {path:P.stockPath(tabs.get(id).url),links:model.links};
@@ -185,4 +185,53 @@ test('invalid selection and foreign page messages cannot alter the ticker',()=>{
   h.send({type:'select',symbol:'GOOW<script>'});assert.equal(h.get('symbol').value,'GOOW');
   h.listeners.message({source:h.window,origin:'https://tossinvest.com',data:{channel:'moa-symbol-sync',source:'extension',type:'select',symbol:'TLT',requestId:'test'}});
   assert.equal(h.get('symbol').value,'GOOW');
+});
+
+const panelSender={id:'test',url:'chrome-extension://test/sidepanel.html'};
+test('panel follows active Toss without a Moa tab and never receives account data',async()=>{
+  const h=background();h.tabs.delete(2);
+  const state=await h.send({type:'panel-tick',windowId:10},panelSender);
+  assert.equal(state.symbol,'GOOW');assert.equal(state.tabId,1);
+  assert.deepEqual(Object.keys(state).sort(),['enabled','path','symbol','tabId','text']);
+  const next=await h.send({type:'panel-select',windowId:10,tabId:1,path:state.path,symbol:'TLT'},panelSender);
+  assert.equal(next.ok,true);assert.equal(h.tabs.get(1).url,'https://www.tossinvest.com/stocks/two/order');
+  assert.ok(h.fetched.every(request=>request.url.startsWith('https://wts-info-api.tossinvest.com/')));
+});
+test('panel ignores untrusted senders, paused sync and a changed active tab',async()=>{
+  const h=background();
+  const request={type:'panel-select',windowId:10,tabId:1,path:'/stocks/one/order',symbol:'TLT'};
+  await h.send(request,h.sender(1));assert.equal(h.fetched.length,0);
+  h.local.panelSync=false;
+  assert.equal((await h.send(request,panelSender)).enabled,false);
+  assert.equal(h.fetched.length,0);
+  h.local.panelSync=true;
+  h.model.beforeFetch=async()=>{h.tabs.get(1).active=false;h.tabs.get(3).active=true;};
+  assert.ok((await h.send(request,panelSender)).error);
+  assert.equal(h.sent.filter(message=>message.type==='select').length,0);
+});
+test('panel mode pauses paired Moa tabs to prevent selection feedback',async()=>{
+  const h=background();await h.pair();
+  await h.send({type:'panel-tick',windowId:10},panelSender);
+  assert.equal(h.session.pair.enabled,false);assert.equal(h.local.autoConnect,false);
+});
+
+test('panel iframe bridge trusts only the fixed extension parent and sends ticker-only data',()=>{
+  const manifest=JSON.parse(fs.readFileSync('browser_extension/manifest.json','utf8'));
+  const hash=require('node:crypto').createHash('sha256').update(Buffer.from(manifest.key,'base64')).digest('hex').slice(0,32);
+  const id=[...hash].map(c=>String.fromCharCode(97+parseInt(c,16))).join('');
+  const origin='chrome-extension://'+id;
+  assert.ok(fs.readFileSync('order_ui/extension.py','utf8').includes(origin));
+  let listener,opened=0;const local=[],parentMessages=[];
+  const parent={postMessage:(message,target)=>parentMessages.push({message,target})};
+  const win={parent,addEventListener:(_,fn)=>{listener=fn;},postMessage:message=>local.push(message)};
+  const context=vm.createContext({window:win,parent,location:{pathname:'/panel',origin:'http://127.0.0.1:8765'},document:{body:{classList:{add(){}}},querySelector:()=>({}),getElementById:()=>({click(){opened++;}})}});
+  vm.runInContext(fs.readFileSync('order_ui/static/panel-bridge.js','utf8'),context);
+  const data={channel:'moa-panel',type:'select',symbol:'TLT',requestId:'r',clientSecret:'must-not-cross'};
+  listener({source:parent,origin:'https://www.tossinvest.com',data});
+  listener({source:{},origin,data});assert.equal(local.length,0);
+  listener({source:parent,origin,data});assert.equal(local.length,1);assert.equal(local[0].symbol,'TLT');assert.equal(local[0].clientSecret,undefined);
+  listener({source:parent,origin,data:{channel:'moa-panel',type:'open-settings'}});assert.equal(opened,1);
+  listener({source:win,origin:'http://127.0.0.1:8765',data:{channel:'moa-symbol-sync',source:'page',type:'selected',symbol:'AAPL',account:'must-not-cross'}});
+  assert.equal(parentMessages.at(-1).message.symbol,'AAPL');assert.equal(parentMessages.at(-1).message.account,undefined);
+  assert.ok(parentMessages.every(m=>m.target===origin));
 });

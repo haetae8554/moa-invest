@@ -9,12 +9,14 @@
 
 ## 2. Local web credential registration
 
-- [ ] Implement dedicated, atomic Moa credential storage using Windows Credential Manager.
-- [ ] Add a same-origin API and password-style form without credential read-back or browser persistence.
-- [ ] Apply the active-order, preview invalidation and execution-mode requirements in SECURITY.md.
-- [ ] Verify persistence/error cases with fake credential stores and fake broker transport.
+- [x] Implement dedicated, atomic Moa credential storage using Windows Credential Manager.
+- [x] Add a same-origin API and password-style form without credential read-back or browser persistence.
+- [x] Apply the active-order, preview invalidation and execution-mode requirements in SECURITY.md.
+- [x] Verify persistence/error cases with fake credential stores and fake broker transport.
 
 ## 3. Distribution
+
+- [x] Add a Chrome side panel with open/close and symbol-sync pause controls.
 
 - [ ] Provide a guided local installation/update workflow.
 - [ ] Prepare extension icons, screenshots, privacy disclosures and store review instructions.

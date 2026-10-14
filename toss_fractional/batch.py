@@ -163,6 +163,7 @@ class FractionalTradeService(FractionalBuyService):
         owner = uuid.uuid4().hex
         claimed = False
         with self.store.connect(write=True) as db:
+            self._assert_credentials(db)
             current = db.execute("SELECT state,expires FROM batches WHERE id=?", (batch_id,)).fetchone()
             if current["state"] == "PREVIEW":
                 mode = self.store.mode(db, self.settings.execution_enabled)

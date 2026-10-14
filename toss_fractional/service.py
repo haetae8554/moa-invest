@@ -43,10 +43,20 @@ class FractionalBuyService:
         self.settings = settings
         self.store = store or OrderStore(settings.data_dir / "orders.sqlite3")
         self.clock = clock
+        with self.store.connect(write=True) as db:
+            db.execute("INSERT OR IGNORE INTO credential_state VALUES (1,?,0)", (settings.credential_revision,))
+
+    def _assert_credentials(self, db):
+        state = db.execute("SELECT revision,pending FROM credential_state WHERE id=1").fetchone()
+        if state["pending"] or state["revision"] != self.settings.credential_revision:
+            raise ValueError("키 설정이 변경되었거나 저장 복구가 필요합니다. 모아를 다시 실행하거나 API 키를 다시 등록해 주세요.")
+
 
     def _broker(self):
+        with self.store.connect() as db:
+            self._assert_credentials(db)
         if self.broker is None:
-            raise TradingError("API 키가 없습니다. .env에 TOSS_CLIENT_ID와 TOSS_CLIENT_SECRET을 설정해 주세요.")
+            raise TradingError("API 키가 없습니다. 화면의 API 키 설정에서 등록해 주세요.")
         return self.broker
 
     def _account(self, account_seq=None):
@@ -71,6 +81,7 @@ class FractionalBuyService:
         if type(enabled) is not bool or type(expected_revision) is not int or expected_revision < 0:
             raise ValueError("주문 모드와 현재 설정 버전을 확인해 주세요.")
         with self.store.connect(write=True) as db:
+            self._assert_credentials(db)
             mode = self.store.mode(db, self.settings.execution_enabled)
             if mode["modeRevision"] != expected_revision:
                 raise ValueError("다른 화면에서 주문 모드가 변경되었습니다. 새로고침해 주세요.")
@@ -87,7 +98,7 @@ class FractionalBuyService:
                   "splitAmountUSD": "9.00", "accounts": [], "selectedAccountSeq": ""}
         if self.broker is None:
             return result
-        accounts = [a for a in self.broker.list_accounts() if a.get("accountType") == "BROKERAGE"]
+        accounts = [a for a in self._broker().list_accounts() if a.get("accountType") == "BROKERAGE"]
         result["accounts"] = [{"accountSeq": str(a["accountSeq"]),
                                "label": "종합매매 · " + str(a.get("accountNo", "----"))[-4:]} for a in accounts]
         if self.settings.account_seq:
@@ -220,6 +231,7 @@ class FractionalBuyService:
         if Decimal(balance["buyingPowerUSD"]) < amount:
             raise ValueError("주문 가능 금액이 변경되었습니다. 다시 미리보기해 주세요.")
         with self.store.connect(write=True) as db:
+            self._assert_credentials(db)
             mode = self.store.mode(db, self.settings.execution_enabled)
             if not mode["executionEnabled"]:
                 raise PermissionError("실주문이 꺼졌습니다. 주문을 전송하지 않았습니다.")

@@ -50,9 +50,40 @@ async function autoPair(sender) {
   if (toss.length !== 1 || moa.length !== 1 || moa[0].id !== sender.tab.id) return null;
   try {return await connectPair(toss[0].id,moa[0].id);} catch (_) {return null;}
 }
+async function panelActive(windowId) {
+  if (!Number.isInteger(windowId)) throw new Error('패널 창을 확인할 수 없어요.');
+  const tabs=await chrome.tabs.query({windowId,active:true});
+  const tab=tabs.find(tab=>P.kind(tab.url)==='toss');
+  return tab || null;
+}
+async function handlePanel(message) {
+  if (message.type === 'panel-refresh') {await resolver.clear();return {ok:true};}
+  const enabled=(await chrome.storage.local.get('panelSync')).panelSync !== false;
+  if (!enabled) return {enabled:false,text:'종목 연결 일시정지 · 주문 입력은 유지돼요'};
+  const tab=await panelActive(message.windowId),path=P.stockPath(tab?.url);
+  if (!tab || !path) return {enabled:true,text:'이 창의 토스 탭에서 종목을 선택해 주세요.'};
+  if (message.type === 'panel-select') {
+    if (message.tabId !== tab.id || message.path !== path || !P.symbol(message.symbol)) return {error:'토스 종목이 바뀌었어요. 다시 선택해 주세요.'};
+    const stock=await resolver.resolve(P.symbol(message.symbol),'symbol');
+    const current=await panelActive(message.windowId);
+    if (current?.id!==tab.id || P.stockPath(current.url)!==path) return {error:'토스 탭이 변경되어 이동을 멈췄어요.'};
+    if (path!==stock.path) await messageTo(tab.id,{type:'select',path:stock.path});
+    return {ok:true};
+  }
+  const stock=await resolver.resolve(path.split('/')[2],'code');
+  const current=await panelActive(message.windowId);
+  if (current?.id!==tab.id || P.stockPath(current.url)!==path) return {enabled:true,text:'종목 변경 확인 중…'};
+  // Panel mode takes over symbol selection; do not let an older paired tab echo.
+  const pair=await getPair();
+  if (pair?.enabled) await notice({...pair,enabled:false},'사이드 패널을 사용 중이에요. 탭 연결은 일시정지됐어요.');
+  await chrome.storage.local.set({autoConnect:false});
+  return {enabled:true,symbol:stock.symbol,tabId:tab.id,path,text:`토스 ↔ 모아 · ${stock.symbol}`};
+}
 async function handle(message,sender) {
   if (!message || sender.id !== chrome.runtime.id) return {ok:false};
   const popup=!sender.tab && sender.url === chrome.runtime.getURL('popup.html');
+  const panel=!sender.tab && sender.url === chrome.runtime.getURL('sidepanel.html');
+  if (panel && ['panel-tick','panel-select','panel-refresh'].includes(message.type)) return handlePanel(message);
   const source=sender.frameId === 0 && sender.tab ? P.kind(sender.url) : null;
   let pair=await getPair();
   if (popup) {

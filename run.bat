@@ -1,4 +1,5 @@
 @echo off
 cd /d "%~dp0"
-python -m order_ui.server --open
+echo Open the Moa extension in Chrome, then choose Side panel.
+python -m order_ui.server %*
 if errorlevel 1 pause

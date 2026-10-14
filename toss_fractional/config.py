@@ -5,6 +5,7 @@ from typing import Mapping
 import os
 
 from .credentials import resolve_credentials
+from .vault import WindowsVault
 
 
 def money(value, label="금액") -> Decimal:
@@ -45,6 +46,7 @@ class Settings:
     data_dir: Path = Path("data")
     token_cache: Path | None = None
     credential_source: str = "직접 설정"
+    credential_revision: str = ""
 
     def __post_init__(self):
         maximum = money(self.max_order_usd, "1회 한도")
@@ -65,14 +67,19 @@ class Settings:
         flag = env.get("TOSS_ORDER_EXECUTION_ENABLED", "false").lower().strip()
         if flag not in {"true", "false"}:
             raise ValueError("TOSS_ORDER_EXECUTION_ENABLED는 true 또는 false여야 합니다.")
-        credentials, source = resolve_credentials(env)
+        try:
+            saved = WindowsVault().read()
+        except (ValueError, PermissionError):
+            return cls(data_dir=Path(env.get("TOSS_DATA_DIR", "data")), credential_source="저장소 확인·키 재등록 필요")
+        credentials, source = ({"TOSS_CLIENT_ID": saved["clientId"], "TOSS_CLIENT_SECRET": saved["clientSecret"]}, "모아 Windows 자격 증명 관리자") if saved else resolve_credentials(env)
         return cls(
             client_id=credentials["TOSS_CLIENT_ID"],
             client_secret=credentials["TOSS_CLIENT_SECRET"],
-            account_seq=env.get("TOSS_ACCOUNT_SEQ", "").strip(),
+            account_seq="" if saved else env.get("TOSS_ACCOUNT_SEQ", "").strip(),
+            credential_revision=saved["revision"] if saved else "",
             execution_enabled=flag == "true",
             max_order_usd=money(env.get("TOSS_FRACTIONAL_ORDER_MAX_USD", "9.99")),
             data_dir=Path(env.get("TOSS_DATA_DIR", "data")),
-            token_cache=Path(env["TOSS_TOKEN_CACHE_PATH"]) if env.get("TOSS_TOKEN_CACHE_PATH") else None,
+            token_cache=Path(env["TOSS_TOKEN_CACHE_PATH"]) if not saved and env.get("TOSS_TOKEN_CACHE_PATH") else None,
             credential_source=source,
         )

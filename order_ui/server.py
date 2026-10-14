@@ -5,6 +5,9 @@ import argparse
 import json
 import secrets
 import webbrowser
+from threading import RLock
+from toss_fractional.registration import CredentialRegistration
+from .extension import EXTENSION_ORIGIN
 
 from toss_fractional import Settings, TradingError, UnknownOrderError, create_service
 from toss_fractional.config import read_env
@@ -12,8 +15,10 @@ from toss_fractional.config import read_env
 STATIC = Path(__file__).parent / "static"
 
 
-def make_server(service, port=8765):
+def make_server(service, port=8765, registration=None):
     csrf = secrets.token_urlsafe(32)
+    request_lock = RLock()
+    registration = registration or CredentialRegistration(service)
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format, *args):
@@ -26,9 +31,12 @@ def make_server(service, port=8765):
             self.send_header("Content-Length", str(len(raw)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("X-Frame-Options", "DENY")
+            embedded = urlsplit(self.path).path == "/panel"
+            if not embedded:
+                self.send_header("X-Frame-Options", "DENY")
+            ancestors = EXTENSION_ORIGIN if embedded else "'none'"
             self.send_header("Referrer-Policy", "no-referrer")
-            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+            self.send_header("Content-Security-Policy", f"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors {ancestors}; base-uri 'none'; form-action 'self'")
             self.end_headers()
             self.wfile.write(raw)
 
@@ -58,6 +66,12 @@ def make_server(service, port=8765):
                 body = json.loads(self.rfile.read(size))
                 if not isinstance(body, dict):
                     raise ValueError("JSON 객체가 필요합니다.")
+                if url.path == "/api/credentials":
+                    if url.query or self.headers.get("Origin") != f"http://{self.headers.get('Host')}":
+                        raise PermissionError("같은 로컬 화면에서 키를 등록해 주세요.")
+                    if set(body) != {"clientId", "clientSecret", "expectedRevision"}:
+                        raise ValueError("키 등록 요청 형식을 확인해 주세요.")
+                    return registration.save(body["clientId"], body["clientSecret"], body["expectedRevision"])
                 if url.path == "/api/execution-mode":
                     return service.set_execution_mode(body.get("enabled"), body.get("expectedRevision"))
                 if url.path == "/api/batches/preview":
@@ -75,6 +89,8 @@ def make_server(service, port=8765):
                         raise ValueError("미리보기와 확인 문구가 필요합니다.")
                     return service.submit(body["previewId"], body["confirmation"], acknowledged=body.get("acknowledged") is True)
                 raise FileNotFoundError
+            if url.path == "/api/credentials":
+                return {**registration.status(), "csrfToken": csrf}
             if url.path == "/api/setup":
                 return {**service.setup(), "csrfToken": csrf}
             if url.path == "/api/execution-mode":
@@ -91,7 +107,7 @@ def make_server(service, port=8765):
                 return service.batch_status(query.get("id", [""])[0])
             if url.path == "/api/orders":
                 return {"orders": service.orders(query.get("account", [None])[0], query.get("status", ["OPEN"])[0])}
-            files = {"/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"), "/theme.js": ("theme.js", "text/javascript"), "/styles.css": ("styles.css", "text/css")}
+            files = {"/panel": ("index.html", "text/html"), "/panel-bridge.js": ("panel-bridge.js", "text/javascript"), "/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"), "/theme.js": ("theme.js", "text/javascript"), "/styles.css": ("styles.css", "text/css")}
             if url.path not in files:
                 raise FileNotFoundError
             filename, mime = files[url.path]
@@ -100,7 +116,12 @@ def make_server(service, port=8765):
 
         def handle_request(self, mutation=False):
             try:
-                data = self.dispatch(mutation)
+                # A slow holdings/auth request must not delay a user's stop.
+                if urlsplit(self.path).path in {"/api/batches/stop", "/api/execution-mode"}:
+                    data = self.dispatch(mutation)
+                else:
+                    with request_lock:
+                        data = self.dispatch(mutation)
                 if data is not None:
                     self.respond(200, data)
             except FileNotFoundError:

@@ -427,7 +427,51 @@ document.querySelectorAll('[data-close]').forEach(button => button.addEventListe
   if (!busy) $(button.dataset.close).close();
 }));
 $('review').addEventListener('cancel', event => { if (busy) event.preventDefault(); });
-$('guide-button').addEventListener('click', () => $('guide').showModal());
+let credentialState = null;
+let credentialSaving = false;
+async function openCredentials() {
+  if (credentialSaving) return;
+  $('credential-form').reset();
+  $('save-credentials').disabled = true;
+  $('credential-status').textContent = '저장 상태 확인 중…';
+  $('guide').showModal();
+  try {
+    credentialState = await api('/api/credentials');
+    $('save-credentials').disabled = !credentialState.supported;
+    $('credential-status').textContent = !credentialState.supported ? '화면에서 키 저장은 Windows에서 지원해요.' : credentialState.needsRecovery ? '이전 저장이 완료되지 않았어요. 키를 다시 등록하면 복구할 수 있어요.' : credentialState.configured ? `${credentialState.source} 사용 중 · 저장된 키는 다시 표시하지 않아요.` : '아직 등록된 키가 없어요.';
+  } catch (_) { $('credential-status').textContent = '서버를 업데이트하고 다시 실행해 주세요.'; }
+}
+$('guide-button').addEventListener('click', openCredentials);
+$('guide').addEventListener('close', () => $('credential-form').reset());
+$('guide').addEventListener('cancel', event => {if (credentialSaving) event.preventDefault();});
+$('credential-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (credentialSaving || !credentialState?.supported) return;
+  credentialSaving = true; busy = true; invalidate(); ready();
+  $('save-credentials').disabled = true;
+  $('save-credentials').textContent = '연결 확인 중…';
+  $('credential-status').textContent = '계좌 연결을 확인하고 이 PC에 저장하고 있어요.';
+  let payload = {clientId:$('client-id').value, clientSecret:$('client-secret').value, expectedRevision:credentialState.revision};
+  $('credential-form').reset();
+  try {
+    const response = await fetch('/api/credentials', {method:'POST', headers:{'Content-Type':'application/json','X-Requested-With':'fractional-buy','X-CSRF-Token':credentialState.csrfToken},body:JSON.stringify(payload)});
+    payload = null;
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || '저장에 실패했어요.');
+    $('guide').close(); toast('API 키를 저장했어요. 실주문은 꺼진 상태로 연결돼요.');
+  } catch (error) {
+    $('credential-status').textContent = error.message;
+    credentialState = await api('/api/credentials').catch(() => null);
+  } finally {
+    payload = null; credentialSaving = false; busy = false;
+    $('credential-form').reset();
+    $('save-credentials').textContent = '연결 확인 후 저장';
+    $('save-credentials').disabled = !credentialState?.supported;
+    await connect();
+  }
+});
+if (location.hash === '#settings') openCredentials();
+window.addEventListener('hashchange', () => {if (location.hash === '#settings') openCredentials();});
 $('ack').addEventListener('change', updateSubmit);
 $('connect').addEventListener('click', connect);
 $('mode-toggle').addEventListener('click', async () => {

@@ -1,5 +1,7 @@
 const $ = id=>document.getElementById(id);
 let pair=null;
+let currentWindowId;
+chrome.windows.getCurrent().then(window=>{currentWindowId=window.id;});
 async function request(message) {
   const result=await chrome.runtime.sendMessage(message);
   if (result?.error) throw new Error(result.error);
@@ -26,9 +28,25 @@ async function run(message) {
   document.querySelectorAll('button').forEach(button=>button.disabled=true);
   try {await request(message);await load();}
   catch(error){await load().catch(()=>{});$('status').textContent=error.message;}
-  finally{$('refresh').disabled=false;}
+  finally{for (const id of ['refresh','open-panel','close-panel','open-tab']) $(id).disabled=false;}
 }
 $('connect').addEventListener('click',()=>run({type:'pair',tossId:Number($('toss').value),moaId:Number($('moa').value)}));
 $('pause').addEventListener('click',()=>run({type:'toggle'}));
 $('refresh').addEventListener('click',()=>run({type:'refresh'}));
 load().catch(error=>{$('status').textContent=error.message;});
+
+$('open-panel').addEventListener('click',()=>{
+  if (currentWindowId === undefined) return;
+  chrome.sidePanel.open({windowId:currentWindowId}).then(()=>window.close()).catch(()=>{$('status').textContent='Chrome 141 이상에서 패널을 열어 주세요.';});
+});
+$('close-panel').addEventListener('click',()=>{
+  if (currentWindowId === undefined) return;
+  chrome.sidePanel.close({windowId:currentWindowId}).then(()=>window.close()).catch(()=>{$('status').textContent='열린 모아 패널이 없어요.';});
+});
+$('open-tab').addEventListener('click',async()=>{
+  const tabs=await chrome.tabs.query({windowId:currentWindowId});
+  const tab=tabs.find(tab=>MoaSync.kind(tab.url)==='moa');
+  if(tab) await chrome.tabs.update(tab.id,{active:true});
+  else await chrome.tabs.create({url:'http://127.0.0.1:8765/',windowId:currentWindowId});
+  window.close();
+});

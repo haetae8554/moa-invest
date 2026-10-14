@@ -9,6 +9,9 @@ import unittest
 from order_ui.server import make_server
 from toss_fractional import FractionalTradeService, Settings
 from test_orders import FakeBroker
+from test_registration import MemoryVault
+from toss_fractional.registration import CredentialRegistration
+from order_ui.extension import EXTENSION_ORIGIN
 
 
 class ServerTests(unittest.TestCase):
@@ -16,7 +19,9 @@ class ServerTests(unittest.TestCase):
         self.temp = TemporaryDirectory()
         self.broker = FakeBroker()
         self.service = FractionalTradeService(self.broker, Settings(data_dir=Path(self.temp.name), execution_enabled=True), interval=0)
-        self.server = make_server(self.service, 0)
+        self.vault = MemoryVault()
+        self.registration = CredentialRegistration(self.service, self.vault, lambda *_: FakeBroker())
+        self.server = make_server(self.service, 0, self.registration)
         self.url = f"http://127.0.0.1:{self.server.server_port}"
         self.thread = Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -36,6 +41,52 @@ class ServerTests(unittest.TestCase):
         with response:
             data = response.read()
             return response.status, json.loads(data) if "json" in response.headers.get("Content-Type", "") else data
+
+    def test_credential_endpoint_remains_available_when_account_lookup_fails(self):
+        self.broker.list_accounts = lambda: (_ for _ in ()).throw(ValueError('invalid'))
+        status, result = self.request('/api/credentials')
+        self.assertEqual(status, 200)
+        headers = {"Origin":self.url, "X-CSRF-Token":result['csrfToken']}
+        body = {"clientId":"synthetic-client", "clientSecret":"synthetic-secret", "expectedRevision":result['revision']}
+        for extra in [{}, {"Origin":"https://www.tossinvest.com", "X-CSRF-Token":result['csrfToken']}, {"X-CSRF-Token":result['csrfToken']}]:
+            self.assertEqual(self.request('/api/credentials', body, extra)[0], 403)
+        status, saved = self.request('/api/credentials', body, headers)
+        self.assertEqual(status, 200)
+        self.assertNotIn('synthetic-secret', json.dumps(saved))
+        self.assertEqual(self.request('/api/setup')[0], 200)
+        self.assertFalse(self.service.execution_mode()['executionEnabled'])
+
+    def test_panel_framing_is_restricted_to_exact_extension(self):
+        for path in ['/', '/panel']:
+            with urlopen(self.url+path, timeout=5) as response:
+                csp = response.headers['Content-Security-Policy']
+                if path == '/panel':
+                    self.assertIn('frame-ancestors '+EXTENSION_ORIGIN+';', csp)
+                    self.assertIsNone(response.headers.get('X-Frame-Options'))
+                    self.assertNotIn('tossinvest.com', csp)
+                else:
+                    self.assertIn("frame-ancestors 'none'", csp)
+                    self.assertEqual(response.headers['X-Frame-Options'], 'DENY')
+        self.assertEqual(self.request('/panel-bridge.js')[0], 200)
+
+    def test_stop_is_not_queued_behind_slow_holdings_lookup(self):
+        _, setup = self.request('/api/setup')
+        headers = {"Origin":self.url, "X-CSRF-Token":setup['csrfToken']}
+        p = self.service.preview_batch('AAPL', '9')
+        entered, release = Event(), Event()
+        original = self.broker.get_holdings
+        def slow(account):
+            entered.set(); release.wait(5)
+            return original(account)
+        self.broker.get_holdings = slow
+        thread = Thread(target=lambda:self.request('/api/holdings?account=1'))
+        thread.start()
+        try:
+            self.assertTrue(entered.wait(2))
+            self.assertEqual(self.request('/api/batches/stop', {'batchId':p['batchId']}, headers)[0], 200)
+            self.assertFalse(release.is_set())
+        finally:
+            release.set(); thread.join(5)
 
     def test_full_http_flow_and_duplicate_submit(self):
         status, setup = self.request('/api/setup')

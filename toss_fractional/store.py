@@ -10,6 +10,7 @@ class OrderStore:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
+            db.execute("CREATE TABLE IF NOT EXISTS credential_state (id INTEGER PRIMARY KEY CHECK(id=1), revision TEXT NOT NULL, pending INTEGER NOT NULL DEFAULT 0)")
             db.execute('''CREATE TABLE IF NOT EXISTS orders (
                 preview_id TEXT PRIMARY KEY, client_order_id TEXT UNIQUE NOT NULL,
                 account TEXT NOT NULL, amount_cents INTEGER NOT NULL,
