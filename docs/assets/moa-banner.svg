@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="440" viewBox="0 0 1200 440" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Moa — Your local investment desk</title>
+  <desc id="desc">Dark Moa banner illustrating 100 dollars split into eleven 9-dollar orders and a final 1-dollar order. No real account data.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="440" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#101013"/><stop offset="1" stop-color="#161d2b"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="722" y1="138" x2="1100" y2="340" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#629eff"/><stop offset="1" stop-color="#3182f6"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="1198" height="438" rx="24" fill="url(#bg)" stroke="#2a2c36" stroke-width="2"/>
+  <path d="M625 1V439M1 374H1199" stroke="#fff" stroke-opacity=".05"/>
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <rect x="54" y="48" width="36" height="36" rx="11" fill="#3182f6"/>
+    <path d="M63 74V61H69V65C70 59 76 60 76 65V74M76 65C77 59 83 60 83 65V74" stroke="white" stroke-width="3" stroke-linejoin="round"/>
+    <text x="104" y="72" fill="#94a0b6" font-size="13" font-weight="600" letter-spacing="2.6">LOCAL INVESTMENT DESK</text>
+    <text x="50" y="188" fill="#f4f5f8" font-size="88" font-weight="750" letter-spacing="-5">Moa.</text>
+    <text x="56" y="235" fill="#e4e7ef" font-size="28" font-weight="600">One plan. Smaller orders.</text>
+    <text x="56" y="272" fill="#8f9aaf" font-size="17">Your portfolio. Your workflow. Your PC.</text>
+    <rect x="56" y="308" width="143" height="30" rx="15" fill="#202633"/>
+    <circle cx="73" cy="323" r="4" fill="#61cfb1"/>
+    <text x="85" y="328" fill="#c5cfdf" font-size="12">RUNS LOCALLY</text>
+    <text x="216" y="328" fill="#8090a8" font-size="13">Python + Web + Chrome</text>
+    <rect x="672" y="49" width="474" height="291" rx="18" fill="#17191f" stroke="#313641"/>
+    <text x="700" y="86" fill="#8e99ad" font-size="12" font-weight="600" letter-spacing="1.8">SPLIT ORDER</text>
+    <rect x="1041" y="67" width="78" height="25" rx="8" fill="#242c3c"/>
+    <text x="1080" y="84" text-anchor="middle" fill="#80aeff" font-size="10" font-weight="600" letter-spacing="1">EXAMPLE</text>
+    <text x="699" y="150" fill="#f4f5f8" font-size="45" font-weight="700">$100<tspan fill="#788499" font-size="16" font-weight="400">  total</tspan></text>
+    <text x="700" y="179" fill="#919bae" font-size="14">11 × $9 + 1 × $1</text>
+    <g fill="url(#blue)">
+      <rect x="700" y="203" width="60" height="35" rx="7"/><rect x="772" y="203" width="60" height="35" rx="7"/>
+      <rect x="844" y="203" width="60" height="35" rx="7"/><rect x="916" y="203" width="60" height="35" rx="7"/>
+      <rect x="988" y="203" width="60" height="35" rx="7"/><rect x="1060" y="203" width="60" height="35" rx="7"/>
+      <rect x="700" y="249" width="60" height="35" rx="7"/><rect x="772" y="249" width="60" height="35" rx="7"/>
+      <rect x="844" y="249" width="60" height="35" rx="7"/><rect x="916" y="249" width="60" height="35" rx="7"/>
+      <rect x="988" y="249" width="60" height="35" rx="7"/>
+    </g>
+    <rect x="1060" y="249" width="60" height="35" rx="7" fill="#263248" stroke="#47638c"/>
+    <g fill="white" font-size="14" font-weight="600" text-anchor="middle">
+      <text x="730" y="226">$9</text><text x="802" y="226">$9</text><text x="874" y="226">$9</text>
+      <text x="946" y="226">$9</text><text x="1018" y="226">$9</text><text x="1090" y="226">$9</text>
+      <text x="730" y="272">$9</text><text x="802" y="272">$9</text><text x="874" y="272">$9</text>
+      <text x="946" y="272">$9</text><text x="1018" y="272">$9</text><text x="1090" y="272" fill="#a9c9ff">$1</text>
+    </g>
+    <text x="700" y="316" fill="#919bae" font-size="12">Preview → Confirm → Send sequentially</text>
+    <text x="56" y="413" fill="#68758a" font-size="12" letter-spacing="1.7">PORTFOLIO / FRACTIONAL ORDERS / SYMBOL SYNC</text>
+    <text x="1144" y="413" text-anchor="end" fill="#7c8aa0" font-size="12">Built around your desk.</text>
+  </g>
+</svg>
