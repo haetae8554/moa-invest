@@ -1,0 +1,38 @@
+# Security
+
+This project is a local trading tool. It is not a hosted multi-user service and does not claim to be free of vulnerabilities.
+
+## Credentials and local data
+
+- Keep API credentials in Windows Credential Manager where possible. The current release reads existing Toss credentials; web-based key registration is planned and is not yet implemented.
+- Never commit real `.env` files, API keys, OAuth tokens, account identifiers, databases, portfolio screenshots, logs or backups. `.env.example` contains blank credential values only.
+- OAuth tokens stay in process memory by default. Setting `TOSS_TOKEN_CACHE_PATH` explicitly enables a legacy plaintext token cache for compatibility with another local application. That file is sensitive even if the API client secret is absent. Keep it outside published content, restrict OS access, and do not put it in shared/synced directories.
+- The existing Windows credential reader is scoped to the named Toss credential targets; it does not enumerate the credential store. Another program running as the same OS user may access those credentials. Protect the Windows session and installed extensions/software.
+- Environment variables and `.env` remain compatibility options, not encrypted storage. Git ignore rules do not encrypt files and do not remove files that were previously committed.
+
+## HTTP and extension boundary
+
+The Python HTTP server binds to `127.0.0.1`. It validates Host/Origin, requires a request header for API access and a CSRF token for state changes. It serves only an allowlist of static files and does not return API credentials. Do not expose it through a public reverse proxy or bind it to a public interface.
+
+The Chrome extension transfers selected symbols and stock-page paths. It does not receive the broker API client ID/secret, use the order API, or submit orders. Public stock metadata requests use `credentials: omit`. Unofficial website metadata endpoints can change or become unavailable.
+
+## Planned web credential registration
+
+The intended scope is a form in the locally served Moa UI, not a public website collecting users' brokerage credentials:
+
+1. Accept keys only through a same-origin, CSRF-protected POST with bounded input. Do not put secrets in URLs, analytics, logs, error bodies or browser storage.
+2. Store both values as one versioned record in a dedicated Moa Windows Credential Manager target. Preserve the original application's credential namespace.
+3. Return only configured/validation status, never saved key values. Clear form fields after submission; no read-back/reveal endpoint.
+4. Serialize credential changes with order execution. Reject changes during active/uncertain orders, invalidate previews, reset token state and require fresh explicit execution enablement after a successful change.
+5. Keep new tokens in memory; do not silently create a plaintext token file. Other operating systems must use an equivalent OS key store or explicit memory-only operation rather than silently falling back to plaintext.
+6. Test storage failure, partial update prevention, bad credentials, CSRF, credential leakage in responses/logs and active-order conflicts using fakes before enabling real key changes.
+
+## Publishing checks
+
+Run `python scripts/check_public_tree.py --staged` before committing and `python scripts/check_public_tree.py` against the committed tree. The check blocks known local/private file paths and common secret formats without printing matched values. It is an additional guard, not a complete secret scanner. CI runs the same check and uses synthetic broker responses only.
+
+GitHub's public-repository secret scanning and push protection provide additional coverage for supported patterns; do not rely on them to recognize every broker's credentials. If a real secret is published, revoke/rotate it first, then remove it from history and review its use.
+
+## Reporting a vulnerability
+
+Do not post credentials, account information or exploit details in a public issue. Use the repository's private vulnerability reporting channel when available. Include a minimal sanitized reproduction and affected version.

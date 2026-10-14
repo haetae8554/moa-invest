@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>모아 · 내 투자와 분할 주문</title><script src="/theme.js"></script><link rel="stylesheet" href="/styles.css"><script src="/app.js" defer></script></head>
+<body>
+<header class="topbar"><a class="brand" href="/" aria-label="모아 홈">모아</a><nav aria-label="주 메뉴"><a href="#buy" class="active">내 투자 · 주문</a><a href="#history">주문 기록</a></nav><div class="mode-controls"><select id="theme" aria-label="화면 테마"><option value="system">시스템</option><option value="light">라이트</option><option value="dark">다크</option></select><span class="status" id="mode">연결 중</span><button id="mode-toggle" class="mode-toggle" role="switch" aria-checked="false" aria-label="실주문 허용" disabled>실주문 켜기</button></div></header>
+<main>
+  <section class="account-strip"><div class="account-picker"><label for="account">주문 계좌</label><select id="account" disabled><option value="">연결 중</option></select></div><div class="cash"><span class="muted">주문 가능</span><strong id="balance">—</strong></div><button class="text-button" id="connect">새로고침</button></section>
+  <div id="connection" class="connection" role="status"><strong id="connection-title">계좌 연결 확인 중</strong><p id="connection-copy">잠시만 기다려 주세요.</p><button class="text-button" id="guide-button">연결 안내</button></div>
+  <div class="symbol-sync"><button id="symbol-sync-toggle" class="text-button" aria-describedby="symbol-sync-status">토스 종목 연결</button><span id="symbol-sync-status" role="status">확장 연결 후 종목을 자동으로 맞춰요</span></div>
+  <div class="workspace" id="buy">
+    <section class="holdings-panel" aria-labelledby="holdings-title">
+      <div class="section-label"><h1 id="holdings-title">내 투자</h1><select id="holding-currency" aria-label="보유 종목 통화"><option value="USD">미국 · USD</option><option value="KRW">국내 · KRW</option></select></div>
+      <strong class="portfolio-total" id="portfolio-total">—</strong><p id="portfolio-profit" class="portfolio-profit">—</p>
+      <div class="holdings-toolbar"><select id="holding-sort" aria-label="보유 종목 정렬"><option value="value">평가금액 높은 순</option><option value="profit">수익률 높은 순</option><option value="name">종목명 순</option></select><div class="metric-switch" role="group" aria-label="보유 종목 표시"><button type="button" data-metric="price" aria-pressed="false">현재가</button><button type="button" data-metric="value" aria-pressed="true" class="selected">평가금</button></div></div>
+      <div class="holdings-filter"><input id="holding-search" type="search" placeholder="내 종목 검색" aria-label="내 종목 검색" autocomplete="off"><button id="refresh-holdings" class="text-button" aria-label="보유 종목 새로고침">새로고침</button></div>
+      <div id="holdings-list" class="holdings-list" aria-label="보유 종목 목록"><p class="list-message">계좌를 연결하면 보유 종목을 표시해요.</p></div>
+      <p id="holdings-updated" class="small muted holdings-updated">통화 기준 손익 · 수수료 전</p>
+    </section>
+    <aside class="order-panel panel" aria-label="분할 주문 입력">
+      <div class="section-label"><h2>분할 주문</h2><span class="pill">$9씩 나눠서</span></div>
+      <label class="search-label" for="symbol">주문 종목</label><div class="search-field"><input id="symbol" form="order-form" maxlength="20" autocomplete="off" spellcheck="false" placeholder="티커 입력 또는 내 종목 선택" required><span>USD</span></div>
+      <div class="stock-detail"><div><h3 id="stock-name">종목을 선택해 주세요</h3><p class="muted" id="stock-caption">내 종목을 누르면 바로 선택돼요.</p></div><strong id="price">—</strong></div>
+      <div id="selected-holding" class="selected-holding" hidden><span>보유 <strong id="selected-quantity">—</strong></span><span>평균 <strong id="selected-average">—</strong></span></div>
+      <form id="order-form">
+        <div class="segmented side-picker" role="group" aria-label="주문 방향"><button type="button" data-side="BUY" aria-pressed="true" class="selected">매수</button><button type="button" data-side="SELL" aria-pressed="false">매도</button></div>
+        <div class="segmented" role="group" aria-label="주문 기준"><button type="button" data-basis="AMOUNT" aria-pressed="true" class="selected">총금액</button><button type="button" data-basis="QUANTITY" aria-pressed="false">총수량</button></div>
+        <label for="amount" id="amount-label">총주문금액</label><div class="amount-field"><span id="amount-prefix">$</span><input id="amount" name="amount" inputmode="decimal" type="number" min="0.01" step="0.01" value="90.00" required aria-describedby="amount-hint"><span id="amount-unit">USD</span></div>
+        <div class="quick-amounts"><button type="button" data-amount="27">$27</button><button type="button" data-amount="90" class="selected">$90</button><button type="button" data-amount="300">$300</button><button type="button" data-amount="900">$900</button></div>
+        <p class="small muted" id="amount-hint">$9씩 나누고 마지막 주문에 남은 금액을 넣어요.</p>
+        <dl class="order-details"><div><dt>주문 방식</dt><dd id="order-method">시장가 · 금액 매수</dd></div><div><dt>예상 수량</dt><dd id="quantity">—</dd></div><div><dt>예상 주문 횟수</dt><dd id="split-count">10회</dd></div><div class="total"><dt id="total-label">총 매수 금액</dt><dd id="total">$90.00</dd></div></dl>
+        <div class="split-plan" id="split-plan">$9 × 10회</div>
+        <button class="primary" type="submit" id="preview-button" disabled>계좌 연결 후 미리보기</button><p class="small muted center" id="preview-hint">내역 확인 후 버튼으로 주문을 시작해요.</p>
+        <details class="order-notes"><summary>수수료·주문 시간 안내</summary><p>수수료 면제는 주문 건당 실제 체결금액 $10 이하 기준이에요. 수량 주문은 시세에 따라 초과할 수 있고 세금·제비용은 별도예요.</p><p>소수점 주문: 미국 정규장 시작부터 종료 1시간 전까지</p></details>
+      </form>
+    </aside>
+  </div>
+  <section class="history-section" id="history"><div class="section-label"><h2>주문 기록</h2><button class="text-button" id="refresh-history">새로고침</button></div><div id="history-list" class="history-list"></div><div class="broker-history"><button id="broker-orders" class="quiet-button" disabled>토스증권 주문 내역</button><select id="order-status" aria-label="조회할 주문 상태"><option value="OPEN">진행 중</option><option value="CLOSED">종료</option></select></div><div id="broker-result" class="muted small" aria-live="polite"></div></section>
+  <footer>토스증권 Open API 연동 · 개인용 도구</footer>
+</main>
+<div class="toast" id="toast" role="alert" hidden></div>
+<dialog id="symbol-sync-guide"><button class="close" data-close="symbol-sync-guide" aria-label="종목 연결 안내 닫기">×</button><span class="pill">토스 ↔ 모아</span><h2>종목은 자동으로 연결해요</h2><ol><li>이미 확장을 설치했다면 Chrome 확장 관리 화면에서 <strong>모아 · 토스 종목 연결</strong>의 새로고침 버튼을 눌러 주세요.</li><li>같은 Chrome 창에서 토스와 모아를 새로고침하세요. 두 탭이 하나씩 열려 있으면 자동 연결돼요.</li><li>토스나 모아에서 종목을 선택하면 상대 화면의 종목도 바뀌어요. <strong>종목별 등록은 필요 없어요.</strong></li></ol><p>탭을 여러 개 열었을 때만 확장 메뉴에서 사용할 두 탭을 선택하세요. 자동 조회 오류는 연결 상태에 표시돼요.</p><p>처음 설치할 때는 Chrome 확장 관리의 개발자 모드 → 압축해제된 확장 프로그램 로드에서 프로젝트의 browser_extension 폴더를 선택하세요.</p><button class="primary" data-close="symbol-sync-guide">확인</button></dialog>
+<dialog id="guide"><button class="close" data-close="guide" aria-label="연결 방법 닫기">×</button><span class="pill">시작하기</span><h2>내 계좌 연결하기</h2><ol><li>기존 프로그램에서 저장한 Windows 자격 증명을 자동으로 함께 사용해요. 같은 Windows 사용자로 실행해 주세요.</li><li>저장된 키가 없다면 토스증권 설정의 Open API 메뉴에서 키를 준비하고 환경 변수에 설정해 주세요.</li><li>서버를 다시 실행하면 계좌가 연결돼요. 키는 브라우저에 전달되지 않아요.</li></ol><p>화면 오른쪽 위의 <strong>실주문 켜기 / 끄기</strong>로 바로 변경할 수 있어요. 설정은 저장되며 재시작 후에도 유지돼요. 모드 변경만으로 주문이 전송되지는 않아요. 이미 전송 중인 주문은 끄더라도 취소되지 않아요.</p><button class="primary" data-close="guide">확인했어요</button></dialog>
+<dialog id="review"><button class="close" data-close="review" aria-label="주문 확인 닫기">×</button><span class="pill">주문 확인</span><h2 id="review-title">분할 주문을 확인해 주세요</h2><div id="review-summary"></div><p class="small muted" id="expiry"></p><div id="warnings" class="notice"></div><label class="check-label"><input type="checkbox" id="ack">여러 건의 시장가 주문을 전송하며, 예상 수량·금액과 실제 체결 결과가 다를 수 있음을 확인했어요.</label><button id="submit-order" class="primary" disabled>분할 주문 시작</button><p id="execution-note" class="small muted center"></p></dialog>
+</body></html>

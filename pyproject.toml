@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "toss-fractional-buy"
+version = "0.4.1"
+description = "Independent Toss Securities fractional batch trading module and local order desk"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+toss-buy = "toss_fractional.cli:main"
+toss-buy-ui = "order_ui.server:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["toss_fractional*", "order_ui*"]
+
+[tool.setuptools.package-data]
+order_ui = ["static/*"]

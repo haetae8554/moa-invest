@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "모아 · 토스 종목 연결",
+  "version": "0.2.0",
+  "description": "토스증권과 로컬 모아 화면의 선택 종목을 양방향으로 연결합니다.",
+  "minimum_chrome_version": "102",
+  "permissions": ["storage"],
+  "host_permissions": ["https://tossinvest.com/*", "https://www.tossinvest.com/*", "https://wts-info-api.tossinvest.com/*", "http://127.0.0.1:8765/*", "http://localhost:8765/*"],
+  "background": {"service_worker": "background.js"},
+  "action": {"default_popup": "popup.html", "default_title": "모아 종목 연결"},
+  "content_scripts": [
+    {"matches": ["https://tossinvest.com/*", "https://www.tossinvest.com/*"], "js": ["protocol.js", "toss.js"]},
+    {"matches": ["http://127.0.0.1:8765/*", "http://localhost:8765/*"], "js": ["protocol.js", "moa.js"]}
+  ]
+}
