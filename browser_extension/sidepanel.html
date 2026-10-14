@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>모아 · 투자 패널</title><link rel="stylesheet" href="sidepanel.css"><script src="protocol.js" defer></script><script src="sidepanel.js" defer></script></head><body>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>모아 · 투자 패널</title><link rel="stylesheet" href="sidepanel.css"><script src="protocol.js" defer></script><script src="launcher.js" defer></script><script src="sidepanel.js" defer></script></head><body>
 <header><strong>모아 <span>투자 패널</span></strong><button id="close" title="패널을 닫아도 시작한 주문은 계속됩니다. 주문 기록에서 남은 주문을 중단하세요." aria-label="모아 패널 닫기">닫기</button></header>
 <div class="toolbar"><button id="sync" aria-pressed="true">종목 연결 켜짐</button><button id="settings">API 키 설정</button><button id="reload">새로고침</button></div>
 <p id="status" role="status">토스 탭의 종목을 확인하고 있어요.</p>
-<section id="offline"><h1>모아를 실행해 주세요</h1><p>프로젝트 폴더의 <strong>run.bat</strong>을 실행하면 이 패널에 연결돼요. 별도 모아 탭은 필요 없어요.</p><p>이미 실행 중이면 서버와 확장을 함께 업데이트했는지 확인해 주세요.</p><p>패널을 닫아도 이미 시작한 주문은 서버에서 계속돼요. 중단하려면 주문 기록의 ‘남은 주문 중단’을 사용하세요.</p><button id="retry">다시 연결</button></section>
+<section id="offline"><h1>모아 연결</h1><p id="launch-status" role="status">PC의 모아 서버를 시작하고 있어요…</p><p>처음 한 번 프로젝트 폴더의 <strong>install-extension.bat</strong>을 실행해 주세요. 이후에는 패널을 열면 서버가 자동 실행돼요.</p><p>패널이나 Chrome을 닫아도 이미 시작한 주문은 PC에서 계속돼요. 중단하려면 주문 기록의 ‘남은 주문 중단’을 사용하세요.</p><button id="retry">다시 연결</button></section>
 <iframe id="desk" title="모아 로컬 투자 화면" src="http://127.0.0.1:8765/panel" referrerpolicy="no-referrer"></iframe>
 </body></html>

@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "모아 · 토스 종목 연결",
-  "version": "0.3.0",
-  "description": "토스 탭 옆 사이드 패널에서 모아를 열고 선택 종목을 연결합니다. 로컬 Python 서버가 필요합니다.",
+  "version": "0.4.0",
+  "description": "토스 탭 옆에서 모아를 사용합니다. Windows 연결 도구를 한 번 등록하면 로컬 서버가 자동 실행됩니다.",
   "minimum_chrome_version": "141",
   "permissions": [
     "storage",
-    "sidePanel"
+    "sidePanel",
+    "nativeMessaging"
   ],
   "host_permissions": [
     "https://tossinvest.com/*",

@@ -65,6 +65,8 @@ TOSS_ORDER_EXECUTION_ENABLED=false
 
 ## UI와 모듈의 분리
 
+Windows Chrome 확장 자동 실행: 프로젝트의 `install-extension.bat`을 한 번 실행한 후 확장에서 패널이나 **새 탭으로 열기**를 사용하면 로컬 서버가 자동 시작됩니다. Python 3.11 이상은 계속 필요합니다. API 키는 기존 Windows 자격 증명 관리자에 남습니다. [등록·업데이트·해제 안내](../browser_extension/README.md#자동-실행-등록해제)
+
 ```text
 toss_fractional/       재사용 가능한 독립 Python 라이브러리
   auth.py             OAuth·공유 토큰 캐시·파일 잠금
@@ -77,6 +79,7 @@ toss_fractional/       재사용 가능한 독립 Python 라이브러리
   cli.py              UI 없는 명령행 진입점
 order_ui/
   server.py           로컬 HTTP 어댑터
+  native_host.py      Chrome 요청으로 정해진 서버만 자동 실행
   static/             HTML / CSS / JavaScript UI
 tests/                실제 주문 없이 동작하는 테스트
 ```

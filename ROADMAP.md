@@ -18,7 +18,8 @@
 
 - [x] Add a Chrome side panel with open/close and symbol-sync pause controls.
 
-- [ ] Provide a guided local installation/update workflow.
+- [x] Add a one-time Windows Chrome launcher registration and automatic hidden server startup.
+- [ ] Package the local runtime as a signed installer without requiring a separate Python installation.
 - [ ] Prepare extension icons, screenshots, privacy disclosures and store review instructions.
 - [ ] Verify the full bidirectional selection flow across Chrome versions and website changes.
 

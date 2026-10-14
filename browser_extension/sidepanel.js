@@ -56,10 +56,13 @@ async function reload(settings=false) {
   await chrome.runtime.sendMessage({type:'panel-refresh'}).catch(()=>{});
   ready=false;pending=null;lastApplied='';++generation;
   $('offline').hidden=false;
+  $('launch-status').textContent='PC의 모아 서버에 연결하고 있어요…';
+  const result=await MoaLauncher.ensure();
+  if(!result.ok) $('launch-status').textContent=result.text;
   $('desk').src=origin+'/panel'+(settings ? '#settings' : '');
 }
 $('sync').addEventListener('click',toggle);
-$('settings').addEventListener('click',()=>{ if(ready) send({type:'open-settings'}); else $('desk').src=origin+'/panel#settings'; });
+$('settings').addEventListener('click',()=>{ if(ready) send({type:'open-settings'}); else reload(true); });
 $('reload').addEventListener('click',()=>reload());
 $('retry').addEventListener('click',()=>reload());
 $('close').addEventListener('click', async()=>{
@@ -68,3 +71,8 @@ $('close').addEventListener('click', async()=>{
 });
 chrome.windows.getCurrent().then(window=>{windowId=window.id;tick();});
 setInterval(tick,1500);
+MoaLauncher.ensure().then(result=>{
+  if(ready) return;
+  if(result.ok) $('desk').src=origin+'/panel';
+  else $('launch-status').textContent=result.text;
+});

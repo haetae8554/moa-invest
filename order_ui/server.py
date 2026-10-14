@@ -91,6 +91,8 @@ def make_server(service, port=8765, registration=None):
                 raise FileNotFoundError
             if url.path == "/api/credentials":
                 return {**registration.status(), "csrfToken": csrf}
+            if url.path == "/api/launcher-status":
+                return {"app": "moa-invest", "launcherProtocol": 1}
             if url.path == "/api/setup":
                 return {**service.setup(), "csrfToken": csrf}
             if url.path == "/api/execution-mode":
@@ -117,7 +119,7 @@ def make_server(service, port=8765, registration=None):
         def handle_request(self, mutation=False):
             try:
                 # A slow holdings/auth request must not delay a user's stop.
-                if urlsplit(self.path).path in {"/api/batches/stop", "/api/execution-mode"}:
+                if urlsplit(self.path).path in {"/api/batches/stop", "/api/execution-mode", "/api/launcher-status"}:
                     data = self.dispatch(mutation)
                 else:
                     with request_lock:
