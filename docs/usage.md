@@ -101,7 +101,7 @@ preview = service.preview_batch(
 # service.stop_batch(preview["batchId"])
 ```
 
-`FractionalTradeService(broker, settings, store, interval=0.5)`로 브로커·저장소를 주입할 수 있습니다. `start_batch(background=True)` 기본값은 백그라운드 스레드이므로 호출한 프로세스를 유지해야 합니다. CLI는 `background=False`, HTTP 서버는 `True`를 사용합니다. 같은 계좌를 여러 프로세스에서 다루면 **동일한 `TOSS_DATA_DIR`**을 지정해 중복 방지 상태를 공유하세요. 다른 프로그램이 보내는 주문까지 조율하지는 않습니다.
+`FractionalTradeService(broker, settings, store, interval=0.5)`로 브로커·저장소를 주입할 수 있습니다. `start_batch(background=True)` 기본값은 백그라운드 스레드이므로 호출한 프로세스를 유지해야 합니다. CLI는 `background=False`, HTTP 서버는 `True`를 사용합니다. 같은 계좌를 여러 프로세스에서 다루면 동일한 `TOSS_DATA_DIR`을 지정해 중복 방지 상태를 공유하세요. 다른 프로그램이 보내는 주문까지 조율하지는 않습니다.
 
 ## 명령행
 
