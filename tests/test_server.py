@@ -15,6 +15,13 @@ from order_ui.extension import EXTENSION_ORIGIN
 
 
 class ServerTests(unittest.TestCase):
+    def test_launcher_health_never_reads_accounts_and_contains_no_secrets(self):
+        self.broker.list_accounts = lambda: (_ for _ in ()).throw(ValueError('no broker calls'))
+        status, result = self.request('/api/launcher-status')
+        self.assertEqual(status, 200)
+        self.assertEqual(result, {'app': 'moa-invest', 'launcherProtocol': 1})
+        self.assertEqual(self.request('/api/launcher-status', headers={'Origin': 'https://tossinvest.com'})[0], 403)
+
     def setUp(self):
         self.temp = TemporaryDirectory()
         self.broker = FakeBroker()

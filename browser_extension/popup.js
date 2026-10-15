@@ -44,9 +44,8 @@ $('close-panel').addEventListener('click',()=>{
   chrome.sidePanel.close({windowId:currentWindowId}).then(()=>window.close()).catch(()=>{$('status').textContent='열린 모아 패널이 없어요.';});
 });
 $('open-tab').addEventListener('click',async()=>{
-  const tabs=await chrome.tabs.query({windowId:currentWindowId});
-  const tab=tabs.find(tab=>MoaSync.kind(tab.url)==='moa');
-  if(tab) await chrome.tabs.update(tab.id,{active:true});
-  else await chrome.tabs.create({url:'http://127.0.0.1:8765/',windowId:currentWindowId});
+  await chrome.tabs.create({url:chrome.runtime.getURL('launch.html'),windowId:currentWindowId});
   window.close();
 });
+$('guide').addEventListener('click',()=>chrome.runtime.openOptionsPage());
+$('demo').addEventListener('click',()=>chrome.tabs.create({url:chrome.runtime.getURL('demo.html')}));
