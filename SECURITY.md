@@ -28,7 +28,19 @@ Registration is a form in the locally served Moa UI (also embedded in the truste
 6. Persist a pending credential revision and disable execution before writing to the OS vault. Failure or a crash leaves execution blocked until explicit re-registration. Old service instances sharing the same data directory cannot operate with the new revision; restart them. Other applications and different data directories are outside this coordination boundary.
 7. Tests use synthetic keys/brokers and cover validation/storage failure, pair atomicity, CSRF, secret-free responses, stale instances, active-order conflicts and extension frame/message boundaries. Real orders are not exercised.
 
+## Chrome server launcher
+
+The optional Windows Native Messaging host accepts exactly `{"action":"ensure-server"}` from the pinned extension origin, with a 1 KiB input limit. Only extension UI pages call it; content scripts and web messages cannot relay launch commands. It neither accepts arbitrary executable paths/arguments nor reads or returns credentials/account/order data. A fixed loopback health route does not call the broker or issue OAuth tokens.
+
+The installer registers one current-user Chrome native host and writes machine-specific paths only under ignored `data/native-host/`. It does not install a startup task, elevate privileges, export Windows credentials or modify `.env`. The launcher serializes starts with a file lock, reuses a compatible server, refuses occupied/unrecognized ports and never kills a server. The server child uses Windows no-window and job-breakaway flags; failure to detach is reported rather than falling back to a process that may die when Chrome closes. Browser closure does not stop accepted batch work; use the existing stop control. PC shutdown can interrupt a batch and does not authorize replay.
+
+Order IDs are opaque identifiers, **not evidence of encryption or anonymity**. They are not API credentials, but identify transactions and should be redacted along with symbols, sides, quantities, account identifiers and statuses in public screenshots or reports. Do not publish real examples in tests or documentation.
+
 ## Publishing checks
+
+The offline extension demo uses synthetic values, no Chrome/native bridge, no persistence and no network transport; its CSP denies connections and frames. It is visibly labeled and available to all users, not a reviewer-specific alternate behavior. Its calculations do not bypass or replace the production broker validation.
+
+`scripts/build_release.py` creates an allowlisted extension archive, checks permission/identity drift, and optionally builds an **unsigned** Python-included Windows helper in an isolated temporary workspace. Only static UI files are added as application data; user `.env`, vault contents and databases are not packaged. The bundled self-test runs without Python on PATH and touches only a temporary loopback HTTP server/static assets. It does not register the helper or read keys. Installation and the store review remain separate explicit steps. Public disclosure drafts are in `PRIVACY.md` and `docs/store/`.
 
 Run `python scripts/check_public_tree.py --staged` before committing and `python scripts/check_public_tree.py` against the committed tree. The check blocks known local/private file paths and common secret formats without printing matched values. It is an additional guard, not a complete secret scanner. CI runs the same check and uses synthetic broker responses only.
 

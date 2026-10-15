@@ -18,8 +18,14 @@
 
 - [x] Add a Chrome side panel with open/close and symbol-sync pause controls.
 
-- [ ] Provide a guided local installation/update workflow.
-- [ ] Prepare extension icons, screenshots, privacy disclosures and store review instructions.
+- [x] Add a one-time Windows Chrome launcher registration and automatic hidden server startup.
+- [x] Build an unsigned Windows helper with Python included, isolated self-check and checksum file.
+- [ ] Sign the Windows distribution and validate install/update/uninstall on a clean PC.
+- [x] Add extension usage/privacy guide and an offline demo with synthetic holdings and split calculations.
+- [x] Prepare privacy disclosures, permission justifications, listing draft and review instructions.
+- [x] Add allowlisted extension packaging and identity/permission checks to CI.
+- [x] Capture a synthetic demo image for review; retain its explicit demo labeling.
+- [ ] Finalize store image dimensions, publisher contact details and assigned store ID before submission.
 - [ ] Verify the full bidirectional selection flow across Chrome versions and website changes.
 
 Public repository visibility does not deploy the trading server or publish the extension to the Chrome Web Store.
