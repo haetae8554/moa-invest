@@ -15,7 +15,7 @@ from .extension import EXTENSION_ORIGIN
 from toss_fractional.auth import _TokenFileLock
 
 HOST_NAME = "com.moa_invest.launcher"
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent.parent
 MAX_MESSAGE = 1024
 IDENTITY = {"app": "moa-invest", "launcherProtocol": 1}
 
@@ -74,8 +74,10 @@ def probe():
 def launch_server():
     if os.name != "nt":
         raise OSError("Windows launcher only")
+    command = ([sys.executable, "--serve"] if getattr(sys, "frozen", False)
+               else [sys.executable, "-m", "order_ui.server", "--env", str(ROOT / ".env")])
     return subprocess.Popen(
-        [sys.executable, "-m", "order_ui.server", "--env", str(ROOT / ".env")],
+        command,
         cwd=ROOT, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL, close_fds=True,
         # Never inherit the native host's lifetime/job or show a console window.

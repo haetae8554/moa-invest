@@ -38,6 +38,10 @@ Order IDs are opaque identifiers, **not evidence of encryption or anonymity**. T
 
 ## Publishing checks
 
+The offline extension demo uses synthetic values, no Chrome/native bridge, no persistence and no network transport; its CSP denies connections and frames. It is visibly labeled and available to all users, not a reviewer-specific alternate behavior. Its calculations do not bypass or replace the production broker validation.
+
+`scripts/build_release.py` creates an allowlisted extension archive, checks permission/identity drift, and optionally builds an **unsigned** Python-included Windows helper in an isolated temporary workspace. Only static UI files are added as application data; user `.env`, vault contents and databases are not packaged. The bundled self-test runs without Python on PATH and touches only a temporary loopback HTTP server/static assets. It does not register the helper or read keys. Installation and the store review remain separate explicit steps. Public disclosure drafts are in `PRIVACY.md` and `docs/store/`.
+
 Run `python scripts/check_public_tree.py --staged` before committing and `python scripts/check_public_tree.py` against the committed tree. The check blocks known local/private file paths and common secret formats without printing matched values. It is an additional guard, not a complete secret scanner. CI runs the same check and uses synthetic broker responses only.
 
 GitHub's public-repository secret scanning and push protection provide additional coverage for supported patterns; do not rely on them to recognize every broker's credentials. If a real secret is published, revoke/rotate it first, then remove it from history and review its use.

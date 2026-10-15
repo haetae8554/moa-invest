@@ -20,6 +20,12 @@ jobs:
       - run: python -m unittest discover -s tests -q
       - run: node --test tests/test_symbol_sync.cjs
       - run: node --test tests/test_launcher.cjs
+      - run: node --test tests/test_demo.cjs
+      - run: python scripts/build_release.py
+      - if: runner.os == 'Windows'
+        run: python -m pip install -r requirements-build.txt
+      - if: runner.os == 'Windows'
+        run: python scripts/build_release.py --windows
       - run: node --check order_ui/static/app.js
       - run: node --check order_ui/static/panel-bridge.js
       - run: node --check browser_extension/sidepanel.js

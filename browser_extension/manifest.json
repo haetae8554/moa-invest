@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "모아 · 토스 종목 연결",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "토스 탭 옆에서 모아를 사용합니다. Windows 연결 도구를 한 번 등록하면 로컬 서버가 자동 실행됩니다.",
   "minimum_chrome_version": "141",
   "permissions": [
@@ -53,6 +53,7 @@
   "side_panel": {
     "default_path": "sidepanel.html"
   },
+  "options_ui": {"page": "options.html", "open_in_tab": true},
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'none'; frame-src http://127.0.0.1:8765; connect-src 'self' https://wts-info-api.tossinvest.com"
   },

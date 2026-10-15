@@ -146,12 +146,12 @@ def make_server(service, port=8765, registration=None):
     return ThreadingHTTPServer(("127.0.0.1", port), Handler)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Local fractional buy desk")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--env", type=Path, default=Path(".env"))
     parser.add_argument("--open", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     service = create_service(Settings.from_env(read_env(args.env)))
     server = make_server(service, args.port)
     address = f"http://127.0.0.1:{server.server_port}"

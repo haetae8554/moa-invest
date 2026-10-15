@@ -47,3 +47,5 @@ $('open-tab').addEventListener('click',async()=>{
   await chrome.tabs.create({url:chrome.runtime.getURL('launch.html'),windowId:currentWindowId});
   window.close();
 });
+$('guide').addEventListener('click',()=>chrome.runtime.openOptionsPage());
+$('demo').addEventListener('click',()=>chrome.tabs.create({url:chrome.runtime.getURL('demo.html')}));

@@ -13,7 +13,7 @@
 ![Chrome Manifest V3](https://img.shields.io/badge/Chrome-Manifest_V3-4285F4?style=flat-square&logo=googlechrome&logoColor=white)
 ![Local first](https://img.shields.io/badge/Local-first-30B8A0?style=flat-square)
 
-[빠른 시작](#quick-start) · [주요 기능](#features) · [분할 방식](#splitting) · [Python 모듈](#module) · [보안](SECURITY.md) · [로드맵](ROADMAP.md)
+[빠른 시작](#quick-start) · [주요 기능](#features) · [분할 방식](#splitting) · [Python 모듈](#module) · [개인정보](PRIVACY.md) · [배포 준비](docs/store/REVIEW.md) · [로드맵](ROADMAP.md)
 
 </div>
 
@@ -170,19 +170,24 @@ preview = service.preview_batch(
 
 ## 개발과 기여
 
+확장 메뉴에 **사용 안내 · 개인정보**, **연결 없이 데모 보기**가 있습니다. 데모는 고정된 가상 종목으로 분할 계산만 보여 주며 API 키·계좌·네트워크를 사용하지 않습니다.
+
+**스토어 등록 전 준비:** [소개문 초안](docs/store/LISTING.ko.md), [권한·데이터 신고 및 심사 안내](docs/store/REVIEW.md), [패키지 빌드](docs/store/BUILD.md)를 제공합니다. Python 포함 Windows 시험 패키지도 빌드할 수 있으며, 압축을 푼 뒤 `Install.cmd`로 등록하면 별도 Python 설치가 필요 없습니다. 현재 패키지는 **서명되지 않은 시험 배포본**이고, Chrome 웹 스토어에는 등록하지 않았습니다. 기존 소스 실행 환경을 쓰고 있다면 새 패키지로 옮길 필요 없이 확장을 새로고침하면 됩니다.
+
 ```text
 moa-invest/
 ├── toss_fractional/     인증 · 계좌 · 시세 · 분할 주문 · 저장소
 ├── order_ui/            로컬 HTTP 서버와 웹 UI
 ├── browser_extension/   Chrome 종목 연결 확장
 ├── tests/               모의 브로커·브라우저 테스트
-├── scripts/             공개 파일 검사
+├── scripts/             공개 파일 검사 · 패키지 빌드 · Windows 연결 도구
 └── docs/                사용 가이드와 소개 이미지
 ```
 
 ```powershell
 python -m unittest discover -s tests -v
 node --test tests/test_symbol_sync.cjs
+node --test tests/test_launcher.cjs tests/test_demo.cjs
 node --check order_ui/static/app.js
 python scripts/check_public_tree.py
 ```
@@ -197,8 +202,10 @@ CI는 **Windows와 Linux**에서 Python·JavaScript 테스트와 공개 파일 �
 - [x] 공개 저장소용 비밀 정보 제외 · CI 검사
 - [x] 로컬 웹 화면에서 API 키 등록 및 Windows 자격 증명 관리자 저장
 - [x] 별도 모아 탭이 필요 없는 Chrome 사이드 패널
-- [ ] 설치·업데이트 흐름 개선
-- [ ] Chrome 웹 스토어 배포 준비
+- [x] Python 포함 Windows 시험 패키지 · 자동 실행 연결
+- [x] 스토어용 개인정보·권한·소개문·오프라인 데모 준비
+- [ ] 코드 서명 · 새 Windows PC 설치/업데이트 검증
+- [ ] 실제 스토어 ID 적용 및 최종 심사·등록
 
 [전체 개발 계획 →](ROADMAP.md)
 

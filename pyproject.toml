@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "toss-fractional-buy"
-version = "0.6.0"
+version = "0.7.0"
 description = "Independent Toss Securities fractional batch trading module and local order desk"
 requires-python = ">=3.11"
 dependencies = []

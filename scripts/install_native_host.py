@@ -22,7 +22,7 @@ def batch_path(path):
     return '"' + value.replace('%', '%%') + '"'
 
 
-def build_files(root, python):
+def build_files(root, python, frozen=False):
     folder = root / "data" / "native-host"
     launcher = folder / "launch.cmd"
     manifest = folder / (HOST_NAME + ".json")
@@ -32,15 +32,15 @@ def build_files(root, python):
                "if errorlevel 1 exit /b 1\r\n"
                f"{batch_path(python)} -u -m order_ui.native_host %*\r\n")
     content = {"name": HOST_NAME, "description": "Moa local desk launcher",
-               "path": str(launcher), "type": "stdio", "allowed_origins": [EXTENSION_ORIGIN + "/"]}
+               "path": str(python if frozen else launcher), "type": "stdio", "allowed_origins": [EXTENSION_ORIGIN + "/"]}
     return folder, launcher, manifest, command, content
 
 
-def install(uninstall=False):
+def install(uninstall=False, root=None, executable=None, frozen=False):
     if os.name != "nt" or sys.version_info < (3, 11):
         raise RuntimeError("Windows and Python 3.11+ are required.")
     import winreg
-    folder, launcher, manifest, command, content = build_files(ROOT, Path(sys.executable).resolve())
+    folder, launcher, manifest, command, content = build_files(root or ROOT, Path(executable or sys.executable).resolve(), frozen)
     if uninstall:
         try:
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REGISTRY_KEY) as key:
@@ -53,7 +53,8 @@ def install(uninstall=False):
         print("Moa Chrome launcher unregistered. Keys, orders and running server are unchanged.")
         return
     folder.mkdir(parents=True, exist_ok=True)
-    launcher.write_bytes(command.encode("utf-8"))
+    if not frozen:
+        launcher.write_bytes(command.encode("utf-8"))
     manifest.write_text(json.dumps(content, ensure_ascii=True, indent=2), encoding="utf-8")
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REGISTRY_KEY) as key:
         winreg.SetValueEx(key, None, 0, winreg.REG_SZ, str(manifest))
