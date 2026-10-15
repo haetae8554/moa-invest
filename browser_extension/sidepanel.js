@@ -3,18 +3,25 @@ const $ = id => document.getElementById(id);
 const origin = 'http://127.0.0.1:8765';
 let windowId, ready=false, enabled=true, running=false, navigating=false, generation=0;
 let target=null, lastApplied='', pending=null;
-const send = data => $('desk').contentWindow.postMessage({channel:'moa-panel',...data},origin);
+// about:blank and failed navigations belong to Chrome, not the local server.
+// Only the child can confirm its origin; iframe load alone is not sufficient.
+const send = data => {
+  if (!ready) return;
+  $('desk').contentWindow.postMessage({channel:'moa-panel',...data},origin);
+};
 function notice(text) {
   $('status').textContent=text;
   if (ready) send({type:'status',enabled,text});
 }
 function loaded() {
+  if (ready) return;
   ready=true; $('offline').hidden=true; lastApplied=''; tick();
 }
 window.addEventListener('message', async event => {
   if (event.source !== $('desk').contentWindow || event.origin !== origin || event.data?.channel !== 'moa-panel') return;
   const m=event.data;
   if (m.type === 'ready') {loaded();return;}
+  if (!ready) return;
   if (m.type === 'selected-result' && pending?.id === m.requestId) {
     if (m.ok) lastApplied=pending.symbol;
     pending=null;return;
@@ -30,12 +37,12 @@ window.addEventListener('message', async event => {
   }
 });
 async function tick() {
-  if (!ready) {send({type:'hello'});return;}
+  if (!ready) return;
   if (running || navigating || windowId === undefined) return;
   running=true; const seq=generation;
   try {
     const result=await chrome.runtime.sendMessage({type:'panel-tick',windowId});
-    if (seq!==generation) return;
+    if (seq!==generation || !ready) return;
     enabled=result.enabled !== false;
     $('sync').setAttribute('aria-pressed',String(enabled));
     $('sync').textContent=enabled ? '종목 연결 켜짐' : '종목 연결 꺼짐';
@@ -53,13 +60,21 @@ async function toggle() {
   await chrome.storage.local.set({panelSync:!enabled});await tick();
 }
 async function reload(settings=false) {
-  await chrome.runtime.sendMessage({type:'panel-refresh'}).catch(()=>{});
   ready=false;pending=null;lastApplied='';++generation;
+  target=null;
+  // A fresh WindowProxy rejects delayed ready messages from the previous page.
+  const previous=$('desk'), frame=previous.cloneNode(false);
+  frame.removeAttribute('src');
+  previous.replaceWith(frame);
   $('offline').hidden=false;
   $('launch-status').textContent='PC의 모아 서버에 연결하고 있어요…';
+  await chrome.runtime.sendMessage({type:'panel-refresh'}).catch(()=>{});
+  if ($('desk')!==frame) return;
   const result=await MoaLauncher.ensure();
+  if ($('desk')!==frame) return;
   if(!result.ok) $('launch-status').textContent=result.text;
-  $('desk').src=origin+'/panel'+(settings ? '#settings' : '');
+  // Also support a manually started server when the native helper is absent.
+  frame.src=origin+'/panel'+(settings ? '#settings' : '');
 }
 $('sync').addEventListener('click',toggle);
 $('settings').addEventListener('click',()=>{ if(ready) send({type:'open-settings'}); else reload(true); });
@@ -71,8 +86,5 @@ $('close').addEventListener('click', async()=>{
 });
 chrome.windows.getCurrent().then(window=>{windowId=window.id;tick();});
 setInterval(tick,1500);
-MoaLauncher.ensure().then(result=>{
-  if(ready) return;
-  if(result.ok) $('desk').src=origin+'/panel';
-  else $('launch-status').textContent=result.text;
-});
+// Attach the receiver before navigation so a fast child cannot beat the listener.
+reload();

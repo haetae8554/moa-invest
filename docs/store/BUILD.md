@@ -8,7 +8,7 @@
 python scripts/build_release.py
 ```
 
-결과: `dist/moa-chrome-0.5.0.zip`, `dist/SHA256SUMS.txt`.
+결과: `dist/moa-chrome-0.5.1.zip`, `dist/SHA256SUMS.txt`.
 
 필요한 확장 파일만 허용 목록으로 묶습니다. `.env`, DB, 설치 PC 경로, 테스트 자료, 스크린샷은 확장 ZIP에 포함하지 않습니다. 공개 키에서 파생한 ID와 서버/프레임 origin의 일치, 권한 변경, 비밀정보 패턴도 확인합니다. 저장소를 통째로 압축해 배포하지 마세요.
 
