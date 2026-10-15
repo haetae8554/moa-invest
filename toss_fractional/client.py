@@ -90,6 +90,10 @@ class TossClient:
     def get_prices(self, symbols):
         return items(self._request("GET", "/api/v1/prices", params={"symbols": ",".join(symbols)}))
 
+    def get_daily_candles(self, symbol):
+        return self._request("GET", "/api/v1/candles", params={
+            "symbol": symbol, "interval": "1d", "count": 200, "adjusted": "true"})
+
     def get_buying_power(self, account, currency="USD"):
         return self._request("GET", "/api/v1/buying-power", account=account, params={"currency": currency})
 

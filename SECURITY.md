@@ -16,6 +16,8 @@ The Python HTTP server binds to `127.0.0.1`. It validates Host/Origin, requires 
 
 The Chrome extension transfers selected symbols and stock-page paths. It does not receive the broker API client ID/secret, use the order API, or submit orders. Public stock metadata requests use `credentials: omit`. Unofficial website metadata endpoints can change or become unavailable.
 
+Optional research uses separate read-only routes with the same Host/Origin/header checks. CNN requests use a fixed HTTPS URL and a separate session without brokerage credentials, account data or cookies; redirects are not followed. Success and failure caching limits requests to every 15 minutes per server. Provider errors retain an explicitly stale previous result or an unavailable state, never a fabricated zero. CNN requests do not hold the order/credential request lock. SaveTicker links carry only a validated ticker; newly opened research windows have their opener removed before external navigation. Research preferences, not portfolio data, are stored in localStorage.
+
 ## Local web credential registration
 
 Registration is a form in the locally served Moa UI (also embedded in the trusted Chrome side panel), not a hosted website collecting brokerage credentials:
