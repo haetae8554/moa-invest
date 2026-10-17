@@ -44,7 +44,7 @@ class ResearchTests(unittest.TestCase):
         self.assertIsNone(result['averages'][2]['distancePct'])
 
     def test_bad_candles_do_not_produce_plausible_summary(self):
-        for value in ['NaN', 'Infinity', '-1', '0', None, True]:
+        for value in ['NaN', 'Infinity', '-1', '0', None, True, '1e999999', '1e-999999', '9' * 1000]:
             data = candles(); data['candles'][0]['closePrice'] = value
             with self.assertRaises(ValueError): chart_summary(data, 'NVDA')
         data = candles(); data['candles'][0]['currency'] = 'KRW'
@@ -77,6 +77,7 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(len(calls),1)
         self.assertEqual(calls[0][0],CNN_URL)
         self.assertEqual(calls[0][1]['headers'],{'Accept':'application/json'})
+        self.assertEqual(calls[0][1]['max_response_bytes'],1024*1024)
         now[0]+=901;status[0]=403
         result=data.fear()
         self.assertEqual(result['score'],32.2);self.assertTrue(result['stale'])

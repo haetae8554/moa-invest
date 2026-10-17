@@ -19,9 +19,12 @@
   function newsUrl(symbol) { return ticker(symbol) ? `https://saveticker.com/news/search?q=${encodeURIComponent(ticker(symbol))}` : null; }
   function allocation(items, currency) {
     const rows = items.filter(row => row.currency === currency);
-    const valid = key => rows.every(row => row[key] !== null && row[key] !== undefined && row[key] !== '' && Number.isFinite(Number(row[key])) && Number(row[key]) >= 0);
-    const total = valid('marketValue') ? rows.reduce((sum, row) => sum + Number(row.marketValue), 0) : null;
-    const purchase = valid('purchaseAmount') ? rows.reduce((sum, row) => sum + Number(row.purchaseAmount), 0) : null;
+    const sum = key => {
+      if (!rows.every(row => ['string','number'].includes(typeof row[key]) && String(row[key]).trim() !== '' && Number.isFinite(Number(row[key])) && Number(row[key]) >= 0)) return null;
+      const value=rows.reduce((total,row)=>total+Number(row[key]),0);
+      return Number.isFinite(value) ? value : null;
+    };
+    const total = sum('marketValue'), purchase = sum('purchaseAmount');
     return {total, purchase, rows:rows.map(row => ({...row, weight:total > 0 ? Number(row.marketValue) / total * 100 : null}))
       .sort((a,b) => (b.weight ?? -1) - (a.weight ?? -1))};
   }
@@ -32,7 +35,7 @@
   let prefs = preferences(saved), portfolio = null, currency = 'USD', symbol = '';
   let newsWindow = null, lastNews = '', chartTimer, fearTimer, newsTimer, dragId;
   const requests = new Map();
-  let chartValue = null, fearValue = null;
+  let chartValue = null, fearValue = null, fearRun = 0;
   const money = (n,c='USD') => n === null || n === undefined ? '—' : new Intl.NumberFormat('ko-KR',{style:'currency',currency:c,maximumFractionDigits:c==='USD'?2:0}).format(Number(n));
   const pct = n => `${Number(n)>0?'+':''}${Number(n).toFixed(1)}%`;
   const date = value => new Date(value).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
@@ -53,9 +56,13 @@
     try {
       const response = await fetch(path,{headers:{'X-Requested-With':'fractional-buy'},signal:controller.signal});
       const value = await response.json();
-      if (!response.ok) throw new Error(value.error || '조회하지 못했어요.');
       if (requests.get(id) !== controller || !prefs.enabled[id]) return null;
+      if (!response.ok) throw new Error(value.error || '조회하지 못했어요.');
       return value;
+    } catch(error) {
+      // Superseded requests must not replace newer results, even when parsing fails.
+      if (controller.signal.aborted || requests.get(id) !== controller || !prefs.enabled[id]) return null;
+      throw error;
     } finally { if (requests.get(id) === controller) requests.delete(id); }
   }
   function link(text, href) {
@@ -89,11 +96,12 @@
     target.append(node('p','미국 시장 심리 · 실험적 연결','research-note'));
   }
   async function loadFear() {
+    const run=++fearRun;
     clearTimeout(fearTimer);
     if (!prefs.enabled.fear) return;
     try { const data=await request('fear','/api/research/fear-greed'); if(data) { fearValue=data; renderFear(); } }
     catch(error) { if(error.name!=='AbortError' && prefs.enabled.fear) { if(fearValue) fearValue={...fearValue,stale:true,unavailable:true}; renderFear(); } }
-    finally { clearTimeout(fearTimer); if(prefs.enabled.fear) fearTimer=setTimeout(()=>{ if(!document.hidden) loadFear(); else fearTimer=setTimeout(loadFear,900000); },900000); }
+    finally { if(run===fearRun) { clearTimeout(fearTimer); if(prefs.enabled.fear) fearTimer=setTimeout(()=>{ if(!document.hidden) loadFear(); else fearTimer=setTimeout(loadFear,900000); },900000); } }
   }
   function renderPortfolio() {
     if (!prefs.enabled.portfolio) return;

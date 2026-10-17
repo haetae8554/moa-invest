@@ -1,6 +1,6 @@
 """Optional, read-only research. No account information leaves for CNN."""
 from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, DecimalException
 from threading import RLock
 import time
 import re
@@ -15,14 +15,15 @@ RATINGS = {"extreme fear": "극도의 공포", "fear": "공포", "neutral": "중
 
 
 def number(value):
-    if isinstance(value, bool) or value is None:
+    if isinstance(value, bool) or not isinstance(value, (str, int, float, Decimal)) or len(str(value)) > 80:
         raise ValueError("숫자 정보가 없습니다.")
     try:
         result = Decimal(str(value))
-        if not result.is_finite():
+        # Bound precision/exponents before arithmetic and conversion to JSON floats.
+        if not result.is_finite() or abs(result.adjusted()) > 100 or abs(result.as_tuple().exponent) > 100:
             raise ValueError("유효하지 않은 숫자입니다.")
         return result
-    except InvalidOperation:
+    except DecimalException:
         raise ValueError("유효하지 않은 숫자입니다.") from None
 
 
@@ -104,12 +105,12 @@ class ResearchData:
                 # Limit both success and failure polling; never retry/evade blocks.
                 self._fear_retry = now + 900
                 try:
-                    response = self.session.get(CNN_URL, timeout=8,
+                    response = self.session.get(CNN_URL, timeout=8, max_response_bytes=1024 * 1024,
                                                 headers={"Accept": "application/json"})
                     if response.status_code != 200:
                         raise ValueError("CNN unavailable")
                     self._fear = {**fear_summary(response.json()), "fetchedAt": now}
-                except (TradingError, ValueError, TypeError, KeyError, AttributeError, OverflowError):
+                except (TradingError, ValueError, TypeError, KeyError, AttributeError, OverflowError, RecursionError):
                     if self._fear:
                         return {**self._fear, "stale": True, "unavailable": True}
                     return {"unavailable": True, "sourceUrl": CNN_PAGE}

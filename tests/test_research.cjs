@@ -50,12 +50,14 @@ test('allocation separates currencies and never uses only the filtered visible r
   assert.deepEqual(result.rows.map(r=>r.weight),[60,40]);assert.equal(allocation(rows,'KRW').rows[0].weight,100);
 });
 test('missing price, empty portfolio and zero total never masquerade as 100 percent',()=>{
-  for(const value of [null,undefined,'','NaN','-1']) {
+  for(const value of [null,undefined,'','  ',true,false,[],'NaN','-1']) {
     const result=allocation([{currency:'USD',marketValue:value},{currency:'USD',marketValue:'10'}],'USD');
     assert.equal(result.total,null);assert.ok(result.rows.every(r=>r.weight===null));
   }
   assert.deepEqual(allocation([],'USD'),{total:0,purchase:0,rows:[]});
   assert.equal(allocation([{currency:'USD',marketValue:'0'}],'USD').rows[0].weight,null);
+  const overflow=allocation([{currency:'USD',marketValue:'1e308'},{currency:'USD',marketValue:'1e308'}],'USD');
+  assert.equal(overflow.total,null);assert.ok(overflow.rows.every(r=>r.weight===null));
 });
 test('external research links only carry validated public tickers',()=>{
   assert.equal(newsUrl(' nvda '),'https://saveticker.com/news/search?q=NVDA');
@@ -75,6 +77,19 @@ test('turning off a pending CNN card discards its response and stops refresh',as
   h.calls[0].resolve({ok:true,json:async()=>({score:99})});
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(h.ids.get('research-fear').hidden,true);assert.equal(h.timers.size,0);
+});
+test('superseded CNN errors cannot overwrite a newer result or reset its refresh timer',async()=>{
+  for(const parseFails of [false,true]) {
+    const h=screen();
+    h.toggle('공포·탐욕',false);h.toggle('공포·탐욕',true);
+    h.calls[1].resolve({ok:true,json:async()=>({score:50,rating:'중립',previousClose:null,asOf:'2026-10-17T00:00:00Z',history:[]})});
+    await new Promise(resolve=>setImmediate(resolve));
+    const body=h.ids.get('research-fear-body'), children=body.children, timerIds=[...h.timers.keys()];
+    h.calls[0].resolve({ok:false,json:async()=>{if(parseFails)throw new SyntaxError('invalid JSON');return {error:'old error'};}});
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(body.children,children);assert.deepEqual([...h.timers.keys()],timerIds);
+    assert.equal(body.children[0].children[0].textContent,'50');
+  }
 });
 test('news auto-follow reuses explicit window, detaches opener, and stops when disabled',async()=>{
   const h=screen({enabled:{fear:false,chart:false}});
