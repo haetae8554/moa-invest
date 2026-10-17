@@ -1,4 +1,4 @@
-/* Browser adapter only: all pricing, validation and order execution live in Python. */
+/* Trading UI adapter: broker validation and order execution live in Python. */
 const $ = id => document.getElementById(id);
 let side = 'BUY';
 let basis = 'AMOUNT';
@@ -50,12 +50,14 @@ const syncTicker = value => typeof value === 'string' && /^[A-Z][A-Z0-9.-]{0,19}
 const postSymbolSync = data => window.postMessage({channel:'moa-symbol-sync',source:'page',...data},location.origin);
 function publishSymbol() {
   const symbol=syncTicker($('symbol').value);
+  window.MoaResearch?.select($('symbol').value);
   if (symbol && !busy) postSymbolSync({type:'selected',symbol});
 }
 function selectSymbol(symbol, external=false) {
   if (busy || !syncTicker(symbol)) return false;
   const same=$('symbol').value.trim().toUpperCase() === symbol;
   $('symbol').value=symbol;
+  window.MoaResearch?.select(symbol);
   if (!same) invalidate();
   if (external) { $('holding-search').value=''; $('holding-currency').value='USD'; }
   renderHoldings();
@@ -291,6 +293,7 @@ function profitClass(node, value) {
 }
 function clearHoldings() {
   holdingsRequest += 1; holdingsPending = false; portfolio = null;
+  window.MoaResearch?.update(null, $('holding-currency').value);
   $('portfolio-total').textContent = '—'; $('portfolio-profit').textContent = '—';
   profitClass($('portfolio-profit'), null);
   $('holdings-list').replaceChildren(detailLine('', '보유 종목을 불러오고 있어요.'));
@@ -318,6 +321,7 @@ function renderSelectedHolding() {
   $('selected-average').textContent = moneyFormat(item.averagePurchasePrice);
 }
 function renderHoldings() {
+  window.MoaResearch?.update(portfolio, $('holding-currency').value);
   if (!portfolio) return;
   const currency = $('holding-currency').value;
   const summary = portfolio.summary[currency];
@@ -374,6 +378,7 @@ async function refreshHoldings() {
   } catch (error) {
     if (request!==holdingsRequest) return;
     portfolio=null; $('portfolio-total').textContent='—'; $('portfolio-profit').textContent='—';
+    window.MoaResearch?.update(null, $('holding-currency').value);
     profitClass($('portfolio-profit'),null); $('selected-holding').hidden=true;
     $('holdings-list').replaceChildren(detailLine('보유 종목 조회 실패',error.message));
     $('holdings-updated').textContent='새로고침으로 다시 조회할 수 있어요.';
@@ -417,7 +422,7 @@ document.querySelectorAll('[data-basis]').forEach(button => button.addEventListe
   basis = button.dataset.basis; $('amount').value = basis === 'QUANTITY' ? '1' : '90'; invalidate(); updateAmount();
 }));
 $('account').addEventListener('change', () => { clearHoldings(); invalidate(); ready(); balances(); refreshHoldings(); });
-$('symbol').addEventListener('input', () => { invalidate(); renderHoldings(); });
+$('symbol').addEventListener('input', () => { invalidate(); renderHoldings(); window.MoaResearch?.select($('symbol').value); });
 $('symbol').addEventListener('change', publishSymbol);
 $('amount').addEventListener('input', () => { invalidate(); updateAmount(); });
 document.querySelectorAll('[data-amount]').forEach(button => button.addEventListener('click', () => {

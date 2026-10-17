@@ -5,6 +5,9 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 import json
 import unittest
+from types import SimpleNamespace
+from order_ui.research import ResearchData
+from test_research import candles, fear_payload
 
 from order_ui.server import make_server
 from toss_fractional import FractionalTradeService, Settings
@@ -15,6 +18,35 @@ from order_ui.extension import EXTENSION_ORIGIN
 
 
 class ServerTests(unittest.TestCase):
+    def test_research_routes_are_read_only_and_reject_foreign_origins(self):
+        self.broker.get_daily_candles = lambda symbol: candles()
+        self.assertEqual(self.request('/api/research/chart?symbol=NVDA')[0], 200)
+        self.assertEqual(self.request('/api/research/chart?symbol=../orders')[0], 400)
+        self.assertEqual(self.request('/api/research/chart?symbol=NVDA', headers={'Origin':'https://saveticker.com'})[0], 403)
+        self.assertEqual(self.request('/api/research/fear-greed', headers={'Origin':'https://www.cnn.com'})[0], 403)
+        self.assertEqual(self.request('/api/research/fear-greed', headers={'X-Requested-With':''})[0], 403)
+        self.service.broker = None
+        self.assertEqual(self.request('/api/research/fear-greed')[1]['score'], 32.2)
+        self.assertEqual(self.request('/api/research/chart?symbol=NVDA')[0], 400)
+        self.assertEqual(self.broker.calls, [])
+        for path in ['/research.js','/research.css']:
+            self.assertEqual(self.request(path)[0], 200)
+
+    def test_slow_cnn_does_not_block_account_or_order_control(self):
+        entered, release = Event(), Event()
+        def slow(*args, **kwargs):
+            entered.set(); release.wait(5)
+            return SimpleNamespace(status_code=200, json=fear_payload)
+        self.research.session.get = slow
+        thread = Thread(target=lambda:self.request('/api/research/fear-greed'))
+        thread.start()
+        try:
+            self.assertTrue(entered.wait(2))
+            self.assertEqual(self.request('/api/setup')[0], 200)
+            self.assertFalse(release.is_set())
+        finally:
+            release.set(); thread.join(5)
+
     def test_launcher_health_never_reads_accounts_and_contains_no_secrets(self):
         self.broker.list_accounts = lambda: (_ for _ in ()).throw(ValueError('no broker calls'))
         status, result = self.request('/api/launcher-status')
@@ -28,7 +60,8 @@ class ServerTests(unittest.TestCase):
         self.service = FractionalTradeService(self.broker, Settings(data_dir=Path(self.temp.name), execution_enabled=True), interval=0)
         self.vault = MemoryVault()
         self.registration = CredentialRegistration(self.service, self.vault, lambda *_: FakeBroker())
-        self.server = make_server(self.service, 0, self.registration)
+        self.research = ResearchData(session=SimpleNamespace(get=lambda *args, **kwargs:SimpleNamespace(status_code=200, json=fear_payload)))
+        self.server = make_server(self.service, 0, self.registration, self.research)
         self.url = f"http://127.0.0.1:{self.server.server_port}"
         self.thread = Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
