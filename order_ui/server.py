@@ -8,6 +8,8 @@ import webbrowser
 from threading import RLock
 from toss_fractional.registration import CredentialRegistration
 from .extension import EXTENSION_ORIGIN
+from .research import ResearchData
+from .research_symbols import symbol_relations
 
 from toss_fractional import Settings, TradingError, UnknownOrderError, create_service
 from toss_fractional.config import read_env
@@ -15,10 +17,11 @@ from toss_fractional.config import read_env
 STATIC = Path(__file__).parent / "static"
 
 
-def make_server(service, port=8765, registration=None):
+def make_server(service, port=8765, registration=None, research=None):
     csrf = secrets.token_urlsafe(32)
     request_lock = RLock()
     registration = registration or CredentialRegistration(service)
+    research = research or ResearchData()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format, *args):
@@ -101,6 +104,13 @@ def make_server(service, port=8765, registration=None):
                 return service.balances(query.get("account", [None])[0])
             if url.path == "/api/holdings":
                 return service.holdings(query.get("account", [None])[0])
+            if url.path == "/api/research/fear-greed":
+                return research.fear(query.get("source", ["auto"])[0])
+            if url.path == "/api/research/symbols":
+                return symbol_relations()
+            if url.path == "/api/research/chart":
+                return research.chart(service._broker(), query.get("symbol", [""])[0],
+                                      query.get("basis", ["underlying"])[0])
             if url.path == "/api/history":
                 return {"items": service.store.history()}
             if url.path == "/api/batches/history":
@@ -110,6 +120,8 @@ def make_server(service, port=8765, registration=None):
             if url.path == "/api/orders":
                 return {"orders": service.orders(query.get("account", [None])[0], query.get("status", ["OPEN"])[0])}
             files = {"/panel": ("index.html", "text/html"), "/panel-bridge.js": ("panel-bridge.js", "text/javascript"), "/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"), "/theme.js": ("theme.js", "text/javascript"), "/styles.css": ("styles.css", "text/css")}
+            files["/research.js"] = ("research.js", "text/javascript")
+            files["/research.css"] = ("research.css", "text/css")
             if url.path not in files:
                 raise FileNotFoundError
             filename, mime = files[url.path]
@@ -119,7 +131,7 @@ def make_server(service, port=8765, registration=None):
         def handle_request(self, mutation=False):
             try:
                 # A slow holdings/auth request must not delay a user's stop.
-                if urlsplit(self.path).path in {"/api/batches/stop", "/api/execution-mode", "/api/launcher-status"}:
+                if urlsplit(self.path).path in {"/api/batches/stop", "/api/execution-mode", "/api/launcher-status", "/api/research/fear-greed", "/api/research/chart", "/api/research/symbols"}:
                     data = self.dispatch(mutation)
                 else:
                     with request_lock:
