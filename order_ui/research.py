@@ -1,4 +1,4 @@
-"""Optional, read-only research. No account information leaves for CNN."""
+"""Optional, read-only research. Sentiment providers receive no account data."""
 from datetime import datetime, timezone
 from decimal import Decimal, DecimalException
 from threading import RLock
@@ -11,6 +11,8 @@ from .research_symbols import chart_target
 
 CNN_URL = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
 CNN_PAGE = "https://www.cnn.com/markets/fear-and-greed"
+FGC_URL = "https://feargreedchart.com/api/?action=all"
+FGC_PAGE = "https://feargreedchart.com/"
 RATINGS = {"extreme fear": "극도의 공포", "fear": "공포", "neutral": "중립",
            "greed": "탐욕", "extreme greed": "극도의 탐욕"}
 
@@ -89,38 +91,89 @@ def fear_summary(payload):
             "asOf": updated.isoformat(), "history": history, "sourceUrl": CNN_PAGE}
 
 
+def alternative_fear_summary(payload):
+    """Independent US stock sentiment model, NOT a mirror of the CNN index."""
+    score = number(payload["score"]["score"])
+    if not 0 <= score <= 100:
+        raise ValueError("지수를 확인할 수 없습니다.")
+    updated = datetime.fromtimestamp(float(number(payload["ts"])) / 1000, timezone.utc)
+    if updated.year < 2025:
+        raise ValueError("제공사 응답 시각을 확인할 수 없습니다.")
+    rows = payload["recent"]
+    if not isinstance(rows, list) or len(rows) > 10000:
+        raise ValueError("지수 이력을 확인할 수 없습니다.")
+    history, seen = [], set()
+    for row in rows:
+        day = row["date"]
+        if not isinstance(day, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+            raise ValueError("지수 이력 날짜를 확인할 수 없습니다.")
+        dt = datetime.fromisoformat(day).replace(tzinfo=timezone.utc)
+        value = number(row["score"])
+        if not 0 <= value <= 100 or day in seen or dt.date() > updated.date():
+            raise ValueError("지수 이력을 확인할 수 없습니다.")
+        seen.add(day)
+        history.append({"date": dt.isoformat(), "value": float(value)})
+    history.sort(key=lambda row: row["date"])
+    rating = "극도의 공포" if score <= 20 else "공포" if score <= 40 else "중립" if score <= 60 else "탐욕" if score <= 80 else "극도의 탐욕"
+    return {"score": float(score), "rating": rating, "previousClose": None,
+            "asOf": updated.isoformat(), "asOfLabel": "제공사 응답 시각",
+            "history": history[-90:], "sourceUrl": FGC_PAGE}
+
+
 class ResearchData:
     def __init__(self, session=None, clock=time.time):
         self.session = session or HttpSession()
         self.clock = clock
         self._fear_lock = RLock()
         self._chart_lock = RLock()
-        self._fear = None
-        self._fear_retry = 0
+        self._fear_cache = {}
+        self._fear_retry = {}
+        self._fear_failures = {}
         self._charts = {}
 
-    def fear(self):
+    def _fear_source(self, source):
+        now = self.clock()
+        url, page, name, parser = ((CNN_URL, CNN_PAGE, "CNN 공포·탐욕", fear_summary) if source == "cnn"
+                                  else (FGC_URL, FGC_PAGE, "FearGreedChart 미국시장 심리", alternative_fear_summary))
+        if now >= self._fear_retry.get(source, 0):
+            # Independent providers, never alternate URLs/headers to evade a block.
+            self._fear_retry[source] = now + 900
+            try:
+                response = self.session.get(url, timeout=8, max_response_bytes=1024 * 1024,
+                                            headers={"Accept": "application/json"})
+                if response.status_code != 200:
+                    self._fear_failures[source] = {"failureReason": "http", "httpStatus": response.status_code}
+                else:
+                    result = parser(response.json())
+                    if timestamp(result["asOf"]).timestamp() > now + 300:
+                        raise ValueError("미래 시각의 지수입니다.")
+                    self._fear_cache[source] = {**result, "fetchedAt": now}
+                    self._fear_failures.pop(source, None)
+            except TradingError:
+                self._fear_failures[source] = {"failureReason": "network"}
+            except (ValueError, TypeError, KeyError, AttributeError, OverflowError, RecursionError):
+                self._fear_failures[source] = {"failureReason": "invalidData"}
+        cached = self._fear_cache.get(source)
+        failure = self._fear_failures.get(source, {})
+        meta = {"provider": source, "providerName": name, "sourceUrl": page,
+                "retryAt": self._fear_retry[source], **failure}
+        if not cached:
+            return {**meta, "unavailable": True}
+        stale = now - timestamp(cached["asOf"]).timestamp() > 36 * 3600
+        return {**cached, **meta, "stale": stale or bool(failure), "unavailable": bool(failure)}
+
+    def fear(self, source="auto"):
+        if source not in ("auto", "cnn", "feargreedchart"):
+            raise ValueError("시장 심리지수 출처를 확인해 주세요.")
         with self._fear_lock:
-            now = self.clock()
-            if now >= self._fear_retry:
-                # Limit both success and failure polling; never retry/evade blocks.
-                self._fear_retry = now + 900
-                try:
-                    response = self.session.get(CNN_URL, timeout=8, max_response_bytes=1024 * 1024,
-                                                headers={"Accept": "application/json"})
-                    if response.status_code != 200:
-                        raise ValueError("CNN unavailable")
-                    self._fear = {**fear_summary(response.json()), "fetchedAt": now}
-                except (TradingError, ValueError, TypeError, KeyError, AttributeError, OverflowError, RecursionError):
-                    if self._fear:
-                        return {**self._fear, "stale": True, "unavailable": True}
-                    return {"unavailable": True, "sourceUrl": CNN_PAGE}
-            if not self._fear:
-                return {"unavailable": True, "sourceUrl": CNN_PAGE}
-            # Source date and fetch date are deliberately distinct.
-            stale = now - timestamp(self._fear["asOf"]).timestamp() > 36 * 3600
-            failed = now - self._fear["fetchedAt"] >= 900
-            return {**self._fear, "stale": stale or failed, "unavailable": failed}
+            primary = self._fear_source("cnn" if source == "auto" else source)
+            if source == "auto" and primary["unavailable"]:
+                other = self._fear_source("feargreedchart")
+                fallback = {"reason": primary.get("failureReason"), "httpStatus": primary.get("httpStatus")}
+                if "score" in other:
+                    return {**other, "requestedSource": source, "fallback": fallback}
+                return {**primary, "requestedSource": source, "fallbackUnavailable": True}
+            return {**primary, "requestedSource": source}
 
     def chart(self, broker, symbol, basis="underlying"):
         if not isinstance(symbol, str) or not re.fullmatch(r"[A-Z][A-Z0-9.-]{0,19}|[0-9]{6}", symbol):

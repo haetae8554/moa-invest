@@ -9,6 +9,7 @@ from threading import RLock
 from toss_fractional.registration import CredentialRegistration
 from .extension import EXTENSION_ORIGIN
 from .research import ResearchData
+from .research_symbols import symbol_relations
 
 from toss_fractional import Settings, TradingError, UnknownOrderError, create_service
 from toss_fractional.config import read_env
@@ -104,7 +105,9 @@ def make_server(service, port=8765, registration=None, research=None):
             if url.path == "/api/holdings":
                 return service.holdings(query.get("account", [None])[0])
             if url.path == "/api/research/fear-greed":
-                return research.fear()
+                return research.fear(query.get("source", ["auto"])[0])
+            if url.path == "/api/research/symbols":
+                return symbol_relations()
             if url.path == "/api/research/chart":
                 return research.chart(service._broker(), query.get("symbol", [""])[0],
                                       query.get("basis", ["underlying"])[0])
@@ -128,7 +131,7 @@ def make_server(service, port=8765, registration=None, research=None):
         def handle_request(self, mutation=False):
             try:
                 # A slow holdings/auth request must not delay a user's stop.
-                if urlsplit(self.path).path in {"/api/batches/stop", "/api/execution-mode", "/api/launcher-status", "/api/research/fear-greed", "/api/research/chart"}:
+                if urlsplit(self.path).path in {"/api/batches/stop", "/api/execution-mode", "/api/launcher-status", "/api/research/fear-greed", "/api/research/chart", "/api/research/symbols"}:
                     data = self.dispatch(mutation)
                 else:
                     with request_lock:

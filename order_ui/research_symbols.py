@@ -1,8 +1,8 @@
-"""Reviewed indicator relationships, independent of order symbol selection.
+"""Reviewed research relationships, independent of order symbol selection.
 
 Source: https://www.roundhillinvestments.com/etf/ (reviewed 2026-10-24).
-Only unambiguous single-stock relationships are listed. Never infer a ticker
-from an ETF suffix or substitute a stock ETF for a futures/index benchmark.
+Stock underlyings and index reference ETFs are explicitly distinguished.
+Never infer a ticker from an ETF suffix.
 """
 from types import MappingProxyType
 
@@ -29,11 +29,28 @@ UNDERLYINGS = MappingProxyType({
     "UNHW": ("UNH", "유나이티드헬스"),
 })
 SOURCE_URL = "https://www.roundhillinvestments.com/etf/"
+INDEX_UNDERLYINGS = MappingProxyType({
+    "QDTE": ("NDX", "나스닥100", "QQQ", "https://www.invesco.com/qqq-etf/en/home.html"),
+    "XDTE": ("SPX", "S&P 500", "SPY", "https://www.ssga.com/us/en/individual/etfs/state-street-spdr-sp-500-etf-trust-spy"),
+    "RDTE": ("RUT", "러셀2000", "IWM", "https://www.ishares.com/us/literature/fact-sheet/iwm-ishares-russell-2000-etf-fund-fact-sheet-en-us.pdf"),
+})
+
+
+def symbol_relations():
+    """Public metadata only. Also consumed by news UI, with no broker required."""
+    rows = {symbol: {"symbol": pair[0], "name": pair[1], "kind": "stock",
+                     "newsQuery": pair[0], "chartSymbol": pair[0], "chartProxy": False,
+                     "sourceUrl": SOURCE_URL} for symbol, pair in UNDERLYINGS.items()}
+    rows.update({symbol: {"symbol": index, "name": name, "kind": "index",
+                          "newsQuery": name, "chartSymbol": proxy, "chartProxy": True,
+                          "sourceUrl": f"https://www.roundhillinvestments.com/etf/{symbol.lower()}/",
+                          "proxySourceUrl": source}
+                 for symbol, (index, name, proxy, source) in INDEX_UNDERLYINGS.items()})
+    return rows
 
 
 def chart_target(symbol, basis):
     if basis not in ("underlying", "self"):
         raise ValueError("지표 기준은 원본 종목 또는 선택 종목이어야 합니다.")
-    pair = UNDERLYINGS.get(symbol)
-    underlying = {"symbol": pair[0], "name": pair[1], "sourceUrl": SOURCE_URL} if pair else None
-    return (pair[0] if pair and basis == "underlying" else symbol), underlying
+    underlying = symbol_relations().get(symbol)
+    return (underlying["chartSymbol"] if underlying and basis == "underlying" else symbol), underlying

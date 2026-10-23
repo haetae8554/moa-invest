@@ -11,13 +11,27 @@
       enabled:Object.fromEntries(IDS.map(id => [id, value.enabled?.[id] !== false])),
       wide:Object.fromEntries(IDS.map(id => [id, value.wide?.[id] === true])),
       position:value.position === 'bottom' ? 'bottom' : 'top', autoNews:value.autoNews === true,
-      chartBasis:value.chartBasis === 'self' ? 'self' : 'underlying'};
+      chartBasis:value.chartBasis === 'self' ? 'self' : 'underlying',
+      newsBasis:value.newsBasis === 'self' ? 'self' : 'underlying',
+      fearSource:['cnn','feargreedchart'].includes(value.fearSource) ? value.fearSource : 'auto'};
   }
   function ticker(value) {
     const s = typeof value === 'string' ? value.trim().toUpperCase() : '';
     return /^[A-Z][A-Z0-9.-]{0,19}$/.test(s) ? s : '';
   }
-  function newsUrl(symbol) { return ticker(symbol) ? `https://saveticker.com/news/search?q=${encodeURIComponent(ticker(symbol))}` : null; }
+  function newsTarget(symbol, basis='self', relations=null) {
+    const selected=ticker(symbol);if(!selected) return null;
+    if(basis==='self') return {query:selected,label:selected};
+    if(!relations || typeof relations!=='object') return null;
+    const row=Object.hasOwn(relations,selected) ? relations[selected] : null;
+    if(!row) return {query:selected,label:selected};
+    if(!['stock','index'].includes(row.kind) || typeof row.newsQuery!=='string' || !/^[\p{L}\p{N} .&-]{1,60}$/u.test(row.newsQuery)) return null;
+    return {query:row.newsQuery,label:row.kind==='index'?row.name:`${row.symbol} · ${row.name}`};
+  }
+  function newsUrl(symbol, basis='self', relations=null) {
+    const target=newsTarget(symbol,basis,relations);
+    return target ? `https://saveticker.com/news/search?q=${encodeURIComponent(target.query)}` : null;
+  }
   function allocation(items, currency) {
     const rows = items.filter(row => row.currency === currency);
     const sum = key => {
@@ -29,7 +43,7 @@
     return {total, purchase, rows:rows.map(row => ({...row, weight:total > 0 ? Number(row.marketValue) / total * 100 : null}))
       .sort((a,b) => (b.weight ?? -1) - (a.weight ?? -1))};
   }
-  if (typeof module !== 'undefined' && module.exports) { module.exports = {preferences, ticker, newsUrl, allocation}; return; }
+  if (typeof module !== 'undefined' && module.exports) { module.exports = {preferences, ticker, newsTarget, newsUrl, allocation}; return; }
   const $ = id => document.getElementById(id);
   let saved;
   try { saved = JSON.parse(localStorage.getItem(KEY)); } catch (_) {}
@@ -37,6 +51,7 @@
   let newsWindow = null, lastNews = '', chartTimer, fearTimer, newsTimer, dragId;
   const requests = new Map();
   let chartValue = null, fearValue = null, fearRun = 0;
+  let relations = null, relationsError = false;
   const money = (n,c='USD') => n === null || n === undefined ? '—' : new Intl.NumberFormat('ko-KR',{style:'currency',currency:c,maximumFractionDigits:c==='USD'?2:0}).format(Number(n));
   const pct = n => `${Number(n)>0?'+':''}${Number(n).toFixed(1)}%`;
   const date = value => new Date(value).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
@@ -83,24 +98,32 @@
   function empty(id,text) { body(id).replaceChildren(node('p',text,'research-note')); }
   function renderFear() {
     const data=fearValue, target=body('fear'); target.replaceChildren();
+    const alternate=data?.provider==='feargreedchart';
+    target.append(node('p',data?.providerName || '미국 주식시장 심리','research-basis-note'));
     if (!data || data.score === undefined) target.append(node('p','지수를 불러오지 못했어요. 원본에서 확인해 주세요.','research-note'));
     else {
       const headline=node('div',undefined,'research-headline');
       headline.append(node('strong',Number(data.score).toFixed(0)),node('span',data.rating)); target.append(headline);
       const gauge=node('meter'); gauge.min=0;gauge.max=100;gauge.value=data.score;gauge.setAttribute('aria-label','공포·탐욕 지수'); target.append(gauge);
       const delta=data.previousClose === null ? '' : `전일 대비 ${data.score-data.previousClose>0?'+':''}${(data.score-data.previousClose).toFixed(1)} · `;
-      target.append(node('p',`${delta}${date(data.asOf)} 기준`,'research-note'));
+      target.append(node('p',`${delta}${date(data.asOf)} · ${data.asOfLabel || '지수 기준 시각'}`,'research-note'));
       target.append(spark(data.history,'공포·탐욕 지수 최근 추이'));
       if (data.stale || data.unavailable) target.append(node('p','이전 데이터 · 최신 값은 원본에서 확인','research-stale'));
     }
+    if(alternate) target.append(node('p','CNN과 다른 5개 지표 산식의 미국시장 심리지수예요. CNN 수치와 직접 비교하지 마세요.','research-note'));
+    if(data?.fallback) target.append(node('p',`CNN 연결 실패${data.fallback.httpStatus?` (HTTP ${data.fallback.httpStatus})`:''} · 별도 지수로 표시 중`,'research-stale'));
+    if(data?.unavailable && data.httpStatus) target.append(node('p',`제공사 연결 제한/오류 (HTTP ${data.httpStatus}) · 15분 간격 재확인`,'research-note'));
+    else if(data?.unavailable && data.failureReason==='network') target.append(node('p','네트워크 연결 또는 응답 시간을 확인해 주세요.','research-note'));
+    else if(data?.unavailable && data.failureReason==='invalidData') target.append(node('p','제공사 응답 형식이나 기준 시각을 확인할 수 없어요.','research-note'));
+    if(data?.fallbackUnavailable) target.append(node('p','대체 제공사도 조회하지 못했어요.','research-note'));
+    if(alternate) target.append(link('FearGreedChart 원본 ↗','https://feargreedchart.com/'));
     target.append(link('CNN 원본 ↗','https://www.cnn.com/markets/fear-and-greed'));
-    target.append(node('p','미국 시장 심리 · 실험적 연결','research-note'));
   }
   async function loadFear() {
     const run=++fearRun;
     clearTimeout(fearTimer);
     if (!prefs.enabled.fear) return;
-    try { const data=await request('fear','/api/research/fear-greed'); if(data) { fearValue=data; renderFear(); } }
+    try { const data=await request('fear',`/api/research/fear-greed?source=${prefs.fearSource}`); if(data) { fearValue=data; renderFear(); } }
     catch(error) { if(error.name!=='AbortError' && prefs.enabled.fear) { if(fearValue) fearValue={...fearValue,stale:true,unavailable:true}; renderFear(); } }
     finally { if(run===fearRun) { clearTimeout(fearTimer); if(prefs.enabled.fear) fearTimer=setTimeout(()=>{ if(!document.hidden) loadFear(); else fearTimer=setTimeout(loadFear,900000); },900000); } }
   }
@@ -130,7 +153,10 @@
     const data=chartValue;
     if(!data || (data.selectedSymbol ?? data.symbol)!==symbol || data.basis!==prefs.chartBasis) { empty('chart',symbol?'일봉을 불러오고 있어요.':'종목을 선택해 주세요.'); return; }
     const target=body('chart');target.replaceChildren();
-    if(data.symbol!==symbol) {
+    if(data.symbol!==symbol && data.underlying?.chartProxy) {
+      target.append(node('p',`선택 ${symbol} → 기초지수 ${data.underlying.name}`,'research-basis-note'));
+      target.append(node('p',`지표는 참고 ETF ${data.symbol}의 가격·이동평균이에요. 지수 자체 값이나 ${symbol} 가격이 아니며, 주문 종목은 ${symbol}로 유지돼요.`,'research-note'));
+    } else if(data.symbol!==symbol) {
       target.append(node('p',`선택 ${symbol} → 지표 ${data.symbol} · ${data.underlying.name}`,'research-basis-note'));
       target.append(node('p',`가격·평균·가격 차이는 모두 ${data.symbol} 기준이에요. 주문 종목은 ${symbol}로 유지돼요.`,'research-note'));
     } else {
@@ -160,14 +186,29 @@
   function renderNews() {
     const target=body('news');target.replaceChildren();
     target.append(node('strong',symbol || '종목을 선택해 주세요.','research-symbol'));
-    const open=node('button','뉴스 창 열기 ↗','quiet-button');open.type='button';open.disabled=!symbol;open.addEventListener('click',openNews);target.append(open);
+    const basisLabel=node('label','뉴스 기준 ','research-chart-controls'),basis=node('select');basis.id='research-news-basis';basis.setAttribute('aria-label','종목 뉴스 기준');
+    for(const [value,text] of [['underlying','원본·기초지수'],['self','선택 상품']]){const option=node('option',text);option.value=value;basis.append(option);}basis.value=prefs.newsBasis;
+    basis.addEventListener('change',()=>{prefs.newsBasis=basis.value==='self'?'self':'underlying';save();renderNews();syncNews();});basisLabel.append(basis);target.append(basisLabel);
+    const selected=newsTarget(symbol,prefs.newsBasis,relations);
+    if(symbol && selected) target.append(node('p',`선택 ${symbol} → 뉴스 ${selected.label}`,'research-basis-note'));
+    if(symbol && !selected) {
+      target.append(node('p',relationsError?'뉴스 연결 정보를 불러오지 못했어요.':'뉴스 연결 정보를 불러오고 있어요.','research-note'));
+      if(relationsError){const retry=node('button','연결 정보 재시도','text-button');retry.type='button';retry.addEventListener('click',loadRelations);target.append(retry);}
+    }
+    const open=node('button','뉴스 창 열기 ↗','quiet-button');open.type='button';open.disabled=!selected;open.addEventListener('click',openNews);target.append(open);
     const label=node('label',undefined,'research-check');const check=node('input');check.type='checkbox';check.checked=prefs.autoNews;
     check.addEventListener('change',()=>{prefs.autoNews=check.checked;save();syncNews();});label.append(check,document.createTextNode('열린 창에 종목 자동 연결'));target.append(label);
     target.append(node('p','세이브티커에서 관련 뉴스를 확인해요.','research-note'));
     const status=node('p','', 'research-note');status.id='research-news-status';target.append(status);
   }
+  async function loadRelations() {
+    if(relations || !prefs.enabled.news) return;
+    relationsError=false;
+    try {const data=await request('news','/api/research/symbols');if(data){relations=data;renderNews();syncNews();}}
+    catch(_){if(prefs.enabled.news){relationsError=true;renderNews();}}
+  }
   function openNews() {
-    const url=newsUrl(symbol);if(!url) return;
+    const url=newsUrl(symbol,prefs.newsBasis,relations);if(!url) return;
     try {
       if(!newsWindow || newsWindow.closed) {
         newsWindow=window.open('about:blank','_blank');
@@ -175,15 +216,16 @@
         // The external page never gets an opener into the account/order UI.
         newsWindow.opener=null;
       }
-      newsWindow.location.href=url;lastNews=symbol;newsWindow.focus();
+      newsWindow.location.href=url;lastNews=url;newsWindow.focus();
       $('research-news-status').textContent='뉴스 창을 연결했어요.';
     } catch(_) { newsWindow=null; $('research-news-status').textContent='팝업을 허용한 뒤 다시 열어 주세요.'; }
   }
   function syncNews() {
-    if(!prefs.enabled.news || !prefs.autoNews || !symbol || symbol===lastNews || !newsWindow) return;
+    const url=newsUrl(symbol,prefs.newsBasis,relations);
+    if(!prefs.enabled.news || !prefs.autoNews || !url || url===lastNews || !newsWindow) return;
     try {
       if(newsWindow.closed) {newsWindow=null;return;}
-      newsWindow.location.href=newsUrl(symbol);lastNews=symbol;
+      newsWindow.location.href=url;lastNews=url;
     } catch(_) { newsWindow=null; $('research-news-status').textContent='자동 연결이 끊겼어요. 뉴스 창을 다시 열어 주세요.'; }
   }
   function select(value) {
@@ -212,7 +254,7 @@
     if(id==='fear'){empty('fear','지수를 불러오고 있어요.');loadFear();}
     if(id==='chart'){renderChart();loadChart();}
     if(id==='portfolio')renderPortfolio();
-    if(id==='news'){renderNews();syncNews();}
+    if(id==='news'){renderNews();loadRelations();syncNews();}
   }
   const region=node('section',undefined,'research-tools');region.id='research-tools';region.setAttribute('aria-label','투자 도구');
   const toolbar=node('div',undefined,'section-label');toolbar.append(node('h2','투자 도구'));
@@ -242,6 +284,11 @@
     for(const [delta,text] of [[-1,'↑'],[1,'↓']]) {const button=node('button',text);button.type='button';button.dataset.move=delta;button.setAttribute('aria-label',`${TITLES[id]} ${delta<0?'앞으로':'뒤로'} 이동`);button.addEventListener('click',()=>move(id,delta));controls.append(button);}
     const width=node('button','넓게');width.type='button';width.setAttribute('aria-label',`${TITLES[id]} 넓게 보기`);width.setAttribute('aria-pressed',String(prefs.wide[id]));width.addEventListener('click',()=>{prefs.wide[id]=!prefs.wide[id];width.setAttribute('aria-pressed',String(prefs.wide[id]));save();layout();});controls.append(width);
     head.append(controls);card.append(head);
+    if(id==='fear') {
+      const label=node('label','출처 ','research-chart-controls'),source=node('select');source.id='research-fear-source';source.setAttribute('aria-label','공포·탐욕 지수 출처');
+      for(const [value,text] of [['auto','자동 (CNN → 대체)'],['cnn','CNN만'],['feargreedchart','FearGreedChart']]){const option=node('option',text);option.value=value;source.append(option);}source.value=prefs.fearSource;
+      source.addEventListener('change',()=>{prefs.fearSource=['cnn','feargreedchart'].includes(source.value)?source.value:'auto';save();cancel('fear');fearValue=null;empty('fear','지수를 불러오고 있어요.');loadFear();});label.append(source);card.append(label);
+    }
     if(id==='chart') {
       const label=node('label','지표 기준 ','research-chart-controls'), basis=node('select');basis.id='research-chart-basis';
       basis.setAttribute('aria-label','이동평균 지표 기준');
@@ -255,6 +302,7 @@
   }
   window.MoaResearch={select,update(data,selectedCurrency){portfolio=data;currency=selectedCurrency;renderPortfolio();}};
   layout();renderPortfolio();renderNews();renderChart();
+  if(prefs.enabled.news)loadRelations();
   if(prefs.enabled.fear){empty('fear','지수를 불러오고 있어요.');loadFear();}
   window.addEventListener('pagehide',()=>{clearTimeout(chartTimer);clearTimeout(fearTimer);clearTimeout(newsTimer);for(const id of requests.keys())cancel(id);});
 })();

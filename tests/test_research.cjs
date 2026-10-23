@@ -1,10 +1,14 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {preferences,allocation,newsUrl} = require('../order_ui/static/research.js');
+const {preferences,allocation,newsTarget,newsUrl} = require('../order_ui/static/research.js');
 const fs=require('node:fs');
 const vm=require('node:vm');
 
-function screen(saved={}) {
+const relations={GOOW:{kind:'stock',symbol:'GOOGL',name:'알파벳 A',newsQuery:'GOOGL'},
+  QDTE:{kind:'index',symbol:'NDX',name:'나스닥100',newsQuery:'나스닥100'},
+  XDTE:{kind:'index',symbol:'SPX',name:'S&P 500',newsQuery:'S&P 500'}};
+
+function screen(saved={},metadataFailure=false) {
   const ids=new Map(), timers=new Map(), calls=[], writes=[], popups=[];let seq=0;
   class Element {
     constructor(tag){this.tag=tag;this.children=[];this.attributes={};this.events={};this.hidden=false;this.classList={toggle(){},add(){}};}
@@ -23,16 +27,21 @@ function screen(saved={}) {
   vm.runInNewContext(fs.readFileSync('order_ui/static/research.js','utf8'),{
     window:win,document,localStorage,AbortController,Intl,Date,console,
     setTimeout(fn,ms){const id=++seq;timers.set(id,{fn,ms});return id;},clearTimeout(id){timers.delete(id);},
-    fetch(path,options){return new Promise(resolve=>calls.push({path,options,resolve}));}
+    fetch(path,options){
+      if(path==='/api/research/symbols')return Promise.resolve({ok:!metadataFailure,json:async()=>metadataFailure?{error:'metadata unavailable'}:relations});
+      return new Promise(resolve=>calls.push({path,options,resolve}));
+    }
   });
   function descendants(root){return [root,...(root.children||[]).flatMap(descendants)];}
   const all=()=>descendants(ids.get('research-tools'));
   return {win,ids,calls,writes,timers,popups,
     text(id){return descendants(ids.get(id)).map(e=>e.textContent||'').join(' ');},
     chartBasis(value){const input=ids.get('research-chart-basis');input.value=value;input.events.change();},
+    newsBasis(value){const input=ids.get('research-news-basis');input.value=value;input.events.change();},
+    fearSource(value){const input=ids.get('research-fear-source');input.value=value;input.events.change();},
     toggle(title,checked){const input=all().find(e=>e.attributes?.['aria-label']===`${title} 켜기`);input.checked=checked;input.events.change();},
-    newsButton(){return ids.get('research-news-body').children.find(e=>e.tag==='button');},
-    autoNews(checked){const label=ids.get('research-news-body').children.find(e=>e.tag==='label');const check=label.children[0];check.checked=checked;check.events.change();},
+    newsButton(){return ids.get('research-news-body').children.find(e=>e.tag==='button'&&e.textContent==='뉴스 창 열기 ↗');},
+    autoNews(checked){const check=descendants(ids.get('research-news-body')).find(e=>e.tag==='input'&&e.type==='checkbox');check.checked=checked;check.events.change();},
     async run(ms){for(const [id,timer] of [...timers])if(timer.ms===ms){timers.delete(id);await timer.fn();}}
   };
 }
@@ -48,6 +57,8 @@ test('malformed settings cannot inject cards or duplicate the layout',()=>{
   assert.equal(preferences(null).chartBasis,'underlying');
   assert.equal(preferences({chartBasis:'self'}).chartBasis,'self');
   assert.equal(preferences({chartBasis:'evil'}).chartBasis,'underlying');
+  assert.equal(preferences({fearSource:'crypto',newsBasis:'evil'}).fearSource,'auto');
+  assert.equal(preferences(null).newsBasis,'underlying');
 });
 
 function chartResponse(selectedSymbol,symbol,basis='underlying') {
@@ -135,12 +146,72 @@ test('superseded CNN errors cannot overwrite a newer result or reset its refresh
     h.calls[0].resolve({ok:false,json:async()=>{if(parseFails)throw new SyntaxError('invalid JSON');return {error:'old error'};}});
     await new Promise(resolve=>setImmediate(resolve));
     assert.equal(body.children,children);assert.deepEqual([...h.timers.keys()],timerIds);
-    assert.equal(body.children[0].children[0].textContent,'50');
+    assert.equal(body.children.find(e=>e.className==='research-headline').children[0].textContent,'50');
   }
+});
+
+test('news uses original stock or index queries and encodes ampersands as query data',()=>{
+  assert.equal(newsUrl('GOOW','underlying',relations),newsUrl('GOOGL'));
+  assert.equal(newsTarget('QDTE','underlying',relations).label,'나스닥100');
+  assert.equal(new URL(newsUrl('QDTE','underlying',relations)).searchParams.get('q'),'나스닥100');
+  const spx=new URL(newsUrl('XDTE','underlying',relations));
+  assert.equal(spx.searchParams.get('q'),'S&P 500');assert.equal([...spx.searchParams].length,1);
+  assert.equal(newsUrl('QDTE','self',relations),newsUrl('QDTE'));
+  assert.equal(newsUrl('NVDA','underlying',relations),newsUrl('NVDA'));
+  assert.equal(newsUrl('GOOW','underlying',null),null);
+  assert.equal(newsUrl('GOOW','underlying',{GOOW:{kind:'stock',newsQuery:'https://evil.test'}}),null);
+});
+
+test('mapped news window follows original and index; switching to product is independent of chart',async()=>{
+  const h=screen({enabled:{fear:false,chart:false},autoNews:true});
+  h.win.MoaResearch.select('GOOW');await new Promise(resolve=>setImmediate(resolve));await h.run(450);
+  h.newsButton().events.click();
+  assert.equal(h.popups[0].location.href,newsUrl('GOOGL'));
+  assert.match(h.text('research-news-body'),/GOOW → 뉴스 GOOGL/);
+  h.win.MoaResearch.select('QDTE');await h.run(450);
+  assert.equal(new URL(h.popups[0].location.href).searchParams.get('q'),'나스닥100');
+  h.newsBasis('self');assert.equal(h.popups[0].location.href,newsUrl('QDTE'));
+  assert.equal(h.writes.at(-1).newsBasis,'self');assert.equal(h.writes.at(-1).chartBasis,'underlying');
+  h.newsBasis('underlying');assert.equal(new URL(h.popups[0].location.href).searchParams.get('q'),'나스닥100');
+});
+
+test('missing news mapping disables original lookup rather than silently using product ticker',async()=>{
+  const h=screen({enabled:{fear:false,chart:false}},true);h.win.MoaResearch.select('GOOW');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.newsButton().disabled,true);assert.match(h.text('research-news-body'),/연결 정보를 불러오지 못/);
+  h.newsButton().events.click();assert.equal(h.popups.length,0);
+  h.newsBasis('self');assert.equal(h.newsButton().disabled,false);
+  h.newsButton().events.click();assert.equal(h.popups[0].location.href,newsUrl('GOOW'));
+});
+
+test('index reference ETF is explicitly labelled and is never presented as index points',async()=>{
+  const h=screen({enabled:{fear:false,news:false}});h.win.MoaResearch.select('QDTE');const pending=h.run(450);
+  const value={...chartResponse('QDTE','QQQ'),underlying:{kind:'index',symbol:'NDX',name:'나스닥100',chartProxy:true}};
+  h.calls[0].resolve({ok:true,json:async()=>value});await pending;
+  assert.match(h.text('research-chart-body'),/기초지수 나스닥100/);
+  assert.match(h.text('research-chart-body'),/참고 ETF QQQ/);
+  assert.match(h.text('research-chart-body'),/지수 자체 값이나 QDTE 가격이 아니/);
+});
+
+test('alternative sentiment discloses a different methodology and source switch discards old response',async()=>{
+  const h=screen({enabled:{news:false}});
+  h.fearSource('feargreedchart');assert.equal(h.calls[0].options.signal.aborted,true);
+  assert.match(h.calls[1].path,/source=feargreedchart$/);
+  h.calls[1].resolve({ok:true,json:async()=>({provider:'feargreedchart',providerName:'FearGreedChart 미국시장 심리',score:36,rating:'공포',previousClose:null,asOf:'2026-10-23T20:00:00Z',asOfLabel:'제공사 응답 시각',history:[],fallback:{httpStatus:418}})});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.match(h.text('research-fear-body'),/CNN과 다른 5개 지표/);
+  assert.match(h.text('research-fear-body'),/HTTP 418/);
+  assert.match(h.text('research-fear-body'),/제공사 응답 시각/);
+  const children=h.ids.get('research-fear-body').children;
+  h.calls[0].resolve({ok:true,json:async()=>({score:99})});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.ids.get('research-fear-body').children,children);
+  assert.equal(h.writes.at(-1).fearSource,'feargreedchart');
 });
 test('news auto-follow reuses explicit window, detaches opener, and stops when disabled',async()=>{
   const h=screen({enabled:{fear:false,chart:false}});
   h.win.MoaResearch.select('NVDA');h.autoNews(true);
+  await new Promise(resolve=>setImmediate(resolve));
   await h.run(450);assert.equal(h.popups.length,0);
   h.newsButton().events.click();assert.equal(h.popups.length,1);
   assert.equal(h.popups[0].location.href,newsUrl('NVDA'));

@@ -2,4 +2,5 @@
 @media(max-width:619px){.research-grid{grid-template-columns:1fr}.research-card{padding:14px}.research-wide{grid-column:auto}.research-headline strong{font-size:24px}}
 .research-card meter::-webkit-meter-optimum-value{background:var(--blue)}
 .research-card meter::-moz-meter-bar{background:var(--blue)}
+.research-card-body>.research-link{display:inline-block;margin:4px 10px 0 0}
 .research-chart-controls{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted);margin-bottom:12px}.research-chart-controls select{min-width:0;max-width:170px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:5px;font:inherit}.research-basis-note{font-size:12px;color:var(--secondary);line-height:1.6;overflow-wrap:anywhere;margin:8px 0}.research-chart-controls select:focus-visible{outline:2px solid var(--blue);outline-offset:3px}

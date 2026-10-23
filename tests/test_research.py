@@ -3,8 +3,8 @@ from decimal import Decimal
 from types import SimpleNamespace
 import unittest
 
-from order_ui.research import ResearchData, chart_summary, fear_summary, CNN_URL
-from order_ui.research_symbols import UNDERLYINGS
+from order_ui.research import ResearchData, chart_summary, fear_summary, alternative_fear_summary, CNN_URL, FGC_URL
+from order_ui.research_symbols import UNDERLYINGS, symbol_relations
 from toss_fractional.client import TossClient
 from toss_fractional.errors import TradingError
 
@@ -19,6 +19,11 @@ def fear_payload():
     return {"fear_and_greed": {"score": 32.2, "rating": "fear", "previous_close": 34,
                                 "timestamp": "2026-10-15T19:44:38+00:00"},
             "fear_and_greed_historical": {"data": [{"x": 1792093478000, "y": 32.2}]}}
+
+
+def alternative_payload():
+    return {"score":{"score":36}, "ts":1792093478000,
+            "recent":[{"date":"2026-10-14","score":39},{"date":"2026-10-13","score":42}]}
 
 
 class ResearchTests(unittest.TestCase):
@@ -74,15 +79,15 @@ class ResearchTests(unittest.TestCase):
             calls.append((url,kwargs))
             return SimpleNamespace(status_code=status[0],json=fear_payload)
         data=ResearchData(session=SimpleNamespace(get=get),clock=lambda:now[0])
-        self.assertFalse(data.fear()['stale']);data.fear()
+        self.assertFalse(data.fear('cnn')['stale']);data.fear('cnn')
         self.assertEqual(len(calls),1)
         self.assertEqual(calls[0][0],CNN_URL)
         self.assertEqual(calls[0][1]['headers'],{'Accept':'application/json'})
         self.assertEqual(calls[0][1]['max_response_bytes'],1024*1024)
         now[0]+=901;status[0]=403
-        result=data.fear()
+        result=data.fear('cnn')
         self.assertEqual(result['score'],32.2);self.assertTrue(result['stale'])
-        self.assertTrue(data.fear()['unavailable']);self.assertEqual(len(calls),2)
+        self.assertTrue(data.fear('cnn')['unavailable']);self.assertEqual(len(calls),2)
 
     def test_underlying_uses_actual_prices_and_cache_does_not_mix_selections(self):
         calls=[]
@@ -127,6 +132,75 @@ class ResearchTests(unittest.TestCase):
         with self.assertRaisesRegex(TradingError,'GOOGL'):
             ResearchData().chart(broker,'GOOW')
         self.assertEqual(calls,['GOOGL'])
+
+    def test_index_context_uses_labelled_proxy_but_news_searches_the_index(self):
+        calls=[]
+        broker=SimpleNamespace(get_daily_candles=lambda symbol:calls.append(symbol) or candles())
+        research=ResearchData()
+        for selected,proxy,query in [('QDTE','QQQ','나스닥100'),('XDTE','SPY','S&P 500'),('RDTE','IWM','러셀2000')]:
+            result=research.chart(broker,selected)
+            self.assertEqual(result['symbol'],proxy)
+            self.assertEqual(result['selectedSymbol'],selected)
+            self.assertTrue(result['underlying']['chartProxy'])
+            self.assertEqual(result['underlying']['kind'],'index')
+            self.assertEqual(result['underlying']['newsQuery'],query)
+            self.assertEqual(research.chart(broker,selected,'self')['symbol'],selected)
+        metadata=symbol_relations()
+        self.assertEqual(metadata['GOOW']['newsQuery'],'GOOGL')
+        metadata['GOOW']['chartSymbol']='INVALID'
+        self.assertEqual(symbol_relations()['GOOW']['chartSymbol'],'GOOGL')
+
+    def test_cnn_block_falls_back_to_independent_stock_index_and_caches_each_provider(self):
+        calls=[]; now=[datetime(2026,10,15,20,tzinfo=timezone.utc).timestamp()]
+        def get(url,**kwargs):
+            calls.append((url,kwargs))
+            return SimpleNamespace(status_code=418 if url==CNN_URL else 200,json=alternative_payload)
+        data=ResearchData(session=SimpleNamespace(get=get),clock=lambda:now[0])
+        result=data.fear()
+        self.assertEqual(result['provider'],'feargreedchart')
+        self.assertEqual(result['score'],36)
+        self.assertEqual(result['fallback']['httpStatus'],418)
+        self.assertNotIn('httpStatus',result)
+        self.assertEqual(result['asOfLabel'],'제공사 응답 시각')
+        self.assertIsNone(result['previousClose'])
+        self.assertEqual([url for url,_ in calls],[CNN_URL,FGC_URL])
+        data.fear();self.assertEqual(len(calls),2)
+        cnn=data.fear('cnn');self.assertNotIn('score',cnn);self.assertEqual(cnn['httpStatus'],418)
+        self.assertNotIn('fallback',data.fear('feargreedchart'))
+        self.assertTrue(all(kwargs['headers']=={'Accept':'application/json'} for _,kwargs in calls))
+        self.assertTrue(all(kwargs['max_response_bytes']==1048576 for _,kwargs in calls))
+        now[0]+=901;data.fear();self.assertEqual(len(calls),4)
+
+    def test_fallback_failure_keeps_sources_separate_and_cnn_can_recover(self):
+        now=[datetime(2026,10,15,20,tzinfo=timezone.utc).timestamp()]; statuses={CNN_URL:418,FGC_URL:200};calls=[]
+        def get(url,**kwargs):
+            calls.append(url)
+            return SimpleNamespace(status_code=statuses[url],json=fear_payload if url==CNN_URL else alternative_payload)
+        data=ResearchData(session=SimpleNamespace(get=get),clock=lambda:now[0])
+        self.assertEqual(data.fear()['score'],36)
+        now[0]+=901;statuses[FGC_URL]=503
+        result=data.fear();self.assertEqual(result['score'],36);self.assertTrue(result['unavailable']);self.assertTrue(result['stale'])
+        statuses[CNN_URL]=200;now[0]+=901
+        result=data.fear();self.assertEqual(result['provider'],'cnn');self.assertEqual(result['score'],32.2)
+        self.assertNotIn('fallback',result)
+        self.assertEqual(calls.count(FGC_URL),2)
+        before=len(calls)
+        with self.assertRaises(ValueError):data.fear('crypto')
+        self.assertEqual(len(calls),before)
+
+    def test_alternative_payload_validates_range_dates_and_does_not_mix_previous_close(self):
+        result=alternative_fear_summary(alternative_payload())
+        self.assertEqual(result['rating'],'공포')
+        self.assertEqual(result['history'][0]['value'],42)
+        for value in [-1,101,'NaN',True,None,'1e99999']:
+            payload=alternative_payload();payload['score']['score']=value
+            with self.assertRaises(ValueError):alternative_fear_summary(payload)
+        for rows in [[{'date':'2026-99-20','score':40}], [{'date':'2026-10-16','score':40}],
+                     [{'date':'2026-10-14','score':40}]*2, [{'date':'2026-10-14','score':None}], {}]:
+            payload=alternative_payload();payload['recent']=rows
+            with self.assertRaises((ValueError,TypeError)):alternative_fear_summary(payload)
+        data=ResearchData(session=SimpleNamespace(get=lambda *a,**k:SimpleNamespace(status_code=200,json=alternative_payload)),clock=lambda:0)
+        self.assertEqual(data.fear('feargreedchart')['failureReason'],'invalidData')
 
     def test_cnn_unavailable_and_malformed_do_not_fabricate_zero(self):
         data=ResearchData(session=SimpleNamespace(get=lambda *args,**kwargs:SimpleNamespace(status_code=403)))

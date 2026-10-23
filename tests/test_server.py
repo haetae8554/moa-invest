@@ -45,6 +45,18 @@ class ServerTests(unittest.TestCase):
         for path in ['/research.js','/research.css']:
             self.assertEqual(self.request(path)[0], 200)
 
+    def test_public_symbol_metadata_and_fear_source_need_no_broker(self):
+        self.service.broker=None
+        status, result=self.request('/api/research/symbols')
+        self.assertEqual(status,200)
+        self.assertEqual(result['QDTE']['newsQuery'],'나스닥100')
+        self.assertEqual(result['QDTE']['chartSymbol'],'QQQ')
+        self.assertTrue(result['QDTE']['chartProxy'])
+        self.assertEqual(self.request('/api/research/symbols',headers={'Origin':'https://evil.test'})[0],403)
+        self.assertEqual(self.request('/api/research/fear-greed?source=cnn')[1]['provider'],'cnn')
+        self.assertEqual(self.request('/api/research/fear-greed?source=crypto')[0],400)
+        self.assertEqual(self.broker.calls,[])
+
     def test_slow_cnn_does_not_block_account_or_order_control(self):
         entered, release = Event(), Event()
         def slow(*args, **kwargs):
