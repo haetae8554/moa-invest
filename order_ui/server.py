@@ -106,7 +106,8 @@ def make_server(service, port=8765, registration=None, research=None):
             if url.path == "/api/research/fear-greed":
                 return research.fear()
             if url.path == "/api/research/chart":
-                return research.chart(service._broker(), query.get("symbol", [""])[0])
+                return research.chart(service._broker(), query.get("symbol", [""])[0],
+                                      query.get("basis", ["underlying"])[0])
             if url.path == "/api/history":
                 return {"items": service.store.history()}
             if url.path == "/api/batches/history":

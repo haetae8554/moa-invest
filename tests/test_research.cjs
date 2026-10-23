@@ -28,6 +28,8 @@ function screen(saved={}) {
   function descendants(root){return [root,...(root.children||[]).flatMap(descendants)];}
   const all=()=>descendants(ids.get('research-tools'));
   return {win,ids,calls,writes,timers,popups,
+    text(id){return descendants(ids.get(id)).map(e=>e.textContent||'').join(' ');},
+    chartBasis(value){const input=ids.get('research-chart-basis');input.value=value;input.events.change();},
     toggle(title,checked){const input=all().find(e=>e.attributes?.['aria-label']===`${title} 켜기`);input.checked=checked;input.events.change();},
     newsButton(){return ids.get('research-news-body').children.find(e=>e.tag==='button');},
     autoNews(checked){const label=ids.get('research-news-body').children.find(e=>e.tag==='label');const check=label.children[0];check.checked=checked;check.events.change();},
@@ -43,6 +45,51 @@ test('settings roundtrip preserves every independent toggle, order, width and pl
 test('malformed settings cannot inject cards or duplicate the layout',()=>{
   assert.deepEqual(preferences({order:['news','news','<script>']}).order,['news','fear','portfolio','chart']);
   assert.equal(preferences(null).autoNews,false);assert.equal(preferences({position:'bad'}).position,'top');
+  assert.equal(preferences(null).chartBasis,'underlying');
+  assert.equal(preferences({chartBasis:'self'}).chartBasis,'self');
+  assert.equal(preferences({chartBasis:'evil'}).chartBasis,'underlying');
+});
+
+function chartResponse(selectedSymbol,symbol,basis='underlying') {
+  return {selectedSymbol,symbol,basis,underlying:selectedSymbol!==symbol||selectedSymbol==='GOOW'?{symbol:'GOOGL',name:'알파벳 A'}:null,
+    lastClose:'200',currency:'USD',barDate:'2026-10-23',history:[],averages:[{period:120,value:'140.5',distancePct:'42.35'}]};
+}
+
+test('chart labels underlying prices explicitly and self switch persists without changing selection',async()=>{
+  const h=screen({enabled:{fear:false}});
+  h.win.MoaResearch.select('GOOW');const pending=h.run(450);
+  assert.match(h.calls[0].path,/symbol=GOOW&basis=underlying$/);
+  h.calls[0].resolve({ok:true,json:async()=>chartResponse('GOOW','GOOGL')});await pending;
+  assert.match(h.text('research-chart-body'),/선택 GOOW → 지표 GOOGL · 알파벳 A/);
+  assert.match(h.text('research-chart-body'),/주문 종목은 GOOW로 유지/);
+  assert.match(h.text('research-chart-body'),/\$140\.50/);
+  h.chartBasis('self');assert.match(h.calls[1].path,/symbol=GOOW&basis=self$/);
+  h.calls[1].resolve({ok:true,json:async()=>chartResponse('GOOW','GOOW','self')});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.match(h.text('research-chart-body'),/GOOW 자체 가격 기준/);
+  assert.equal(h.writes.at(-1).chartBasis,'self');
+  assert.match(h.text('research-news-body'),/GOOW/);
+  const restored=screen(h.writes.at(-1));
+  assert.equal(restored.ids.get('research-chart-basis').value,'self');
+});
+
+test('changing chart basis or selection discards late results and never falls back on failure',async()=>{
+  const h=screen({enabled:{fear:false}});
+  h.win.MoaResearch.select('GOOW');const old=h.run(450);
+  h.chartBasis('self');assert.equal(h.calls[0].options.signal.aborted,true);
+  h.calls[1].resolve({ok:true,json:async()=>chartResponse('GOOW','GOOW','self')});
+  await new Promise(resolve=>setImmediate(resolve));
+  const current=h.ids.get('research-chart-body').children;
+  h.calls[0].resolve({ok:true,json:async()=>chartResponse('GOOW','GOOGL')});await old;
+  assert.equal(h.ids.get('research-chart-body').children,current);
+  h.chartBasis('underlying');
+  h.win.MoaResearch.select('AVGW');assert.equal(h.calls[2].options.signal.aborted,true);
+  const latest=h.run(450);
+  h.calls[3].resolve({ok:false,json:async()=>({error:'AVGO 일봉 데이터를 확인할 수 없습니다.'})});await latest;
+  h.calls[2].resolve({ok:true,json:async()=>chartResponse('GOOW','GOOGL')});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.text('research-chart-body'),' AVGO 일봉 데이터를 확인할 수 없습니다.');
+  assert.equal(h.calls.length,4);
 });
 test('allocation separates currencies and never uses only the filtered visible rows',()=>{
   const rows=[{symbol:'A',currency:'USD',marketValue:'60',purchaseAmount:'50'}, {symbol:'B',currency:'USD',marketValue:'40',purchaseAmount:'30'}, {symbol:'C',currency:'KRW',marketValue:'10000',purchaseAmount:'9000'}];

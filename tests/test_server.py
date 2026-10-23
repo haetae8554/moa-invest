@@ -18,6 +18,19 @@ from order_ui.extension import EXTENSION_ORIGIN
 
 
 class ServerTests(unittest.TestCase):
+    def test_chart_underlying_and_self_routes_leave_trading_symbol_untouched(self):
+        calls=[]
+        self.broker.get_daily_candles = lambda symbol:calls.append(symbol) or candles()
+        status, result=self.request('/api/research/chart?symbol=GOOW')
+        self.assertEqual(status,200)
+        self.assertEqual((result['selectedSymbol'],result['symbol']),('GOOW','GOOGL'))
+        status, result=self.request('/api/research/chart?symbol=GOOW&basis=self')
+        self.assertEqual(status,200)
+        self.assertEqual(result['symbol'],'GOOW')
+        self.assertEqual(self.request('/api/research/chart?symbol=AVGW&basis=wrong')[0],400)
+        self.assertEqual(calls,['GOOGL','GOOW'])
+        self.assertEqual(self.broker.calls,[])
+
     def test_research_routes_are_read_only_and_reject_foreign_origins(self):
         self.broker.get_daily_candles = lambda symbol: candles()
         self.assertEqual(self.request('/api/research/chart?symbol=NVDA')[0], 200)

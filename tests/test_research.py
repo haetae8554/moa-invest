@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import unittest
 
 from order_ui.research import ResearchData, chart_summary, fear_summary, CNN_URL
+from order_ui.research_symbols import UNDERLYINGS
 from toss_fractional.client import TossClient
 from toss_fractional.errors import TradingError
 
@@ -82,6 +83,50 @@ class ResearchTests(unittest.TestCase):
         result=data.fear()
         self.assertEqual(result['score'],32.2);self.assertTrue(result['stale'])
         self.assertTrue(data.fear()['unavailable']);self.assertEqual(len(calls),2)
+
+    def test_underlying_uses_actual_prices_and_cache_does_not_mix_selections(self):
+        calls=[]
+        broker=SimpleNamespace(get_daily_candles=lambda symbol:calls.append(symbol) or candles())
+        research=ResearchData()
+        result=research.chart(broker,'GOOW')
+        self.assertEqual(calls,['GOOGL'])
+        self.assertEqual(result['symbol'],'GOOGL')
+        self.assertEqual(result['selectedSymbol'],'GOOW')
+        self.assertEqual(result['underlying']['name'],'알파벳 A')
+        self.assertEqual(result['lastClose'],'200')
+        self.assertEqual(Decimal(result['averages'][2]['value']),Decimal('140.5'))
+        direct=research.chart(broker,'GOOGL')
+        self.assertEqual(calls,['GOOGL'])
+        self.assertEqual(direct['selectedSymbol'],'GOOGL')
+        self.assertIsNone(direct['underlying'])
+        self.assertEqual(research.chart(broker,'GOOW')['selectedSymbol'],'GOOW')
+        own=research.chart(broker,'GOOW','self')
+        self.assertEqual(own['symbol'],'GOOW')
+        self.assertEqual(own['basis'],'self')
+        self.assertEqual(calls,['GOOGL','GOOW'])
+
+    def test_reviewed_underlyings_only_and_invalid_basis_does_not_fetch(self):
+        calls=[]
+        broker=SimpleNamespace(get_daily_candles=lambda symbol:calls.append(symbol) or candles())
+        research=ResearchData()
+        for symbol,(underlying,_) in UNDERLYINGS.items():
+            self.assertEqual(research.chart(broker,symbol)['symbol'],underlying)
+        self.assertEqual(research.chart(broker,'AVGW')['symbol'],'AVGO')
+        for symbol in ['NVDA','ETHU','FAKEW']:
+            result=research.chart(broker,symbol)
+            self.assertEqual(result['symbol'],symbol)
+            self.assertIsNone(result['underlying'])
+        before=len(calls)
+        for basis in ['',None,'SELF','unknown',[]]:
+            with self.assertRaises(ValueError):research.chart(broker,'GOOW',basis)
+        self.assertEqual(len(calls),before)
+
+    def test_underlying_failure_never_silently_substitutes_etf_candles(self):
+        calls=[]
+        broker=SimpleNamespace(get_daily_candles=lambda symbol:calls.append(symbol) or {'candles':[]})
+        with self.assertRaisesRegex(TradingError,'GOOGL'):
+            ResearchData().chart(broker,'GOOW')
+        self.assertEqual(calls,['GOOGL'])
 
     def test_cnn_unavailable_and_malformed_do_not_fabricate_zero(self):
         data=ResearchData(session=SimpleNamespace(get=lambda *args,**kwargs:SimpleNamespace(status_code=403)))

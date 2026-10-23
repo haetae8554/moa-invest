@@ -7,6 +7,7 @@ import re
 
 from toss_fractional.errors import TradingError
 from toss_fractional.http import HttpSession
+from .research_symbols import chart_target
 
 CNN_URL = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
 CNN_PAGE = "https://www.cnn.com/markets/fear-and-greed"
@@ -121,20 +122,23 @@ class ResearchData:
             failed = now - self._fear["fetchedAt"] >= 900
             return {**self._fear, "stale": stale or failed, "unavailable": failed}
 
-    def chart(self, broker, symbol):
+    def chart(self, broker, symbol, basis="underlying"):
         if not isinstance(symbol, str) or not re.fullmatch(r"[A-Z][A-Z0-9.-]{0,19}|[0-9]{6}", symbol):
             raise ValueError("종목을 선택해 주세요.")
+        target, underlying = chart_target(symbol, basis)
         with self._chart_lock:
             now = self.clock()
-            cached = self._charts.get(symbol)
+            cached = self._charts.get(target)
             if cached and cached[0] is broker and now - cached[1] < 300:
-                return cached[2]
-            try:
-                result = chart_summary(broker.get_daily_candles(symbol), symbol)
-            except (KeyError, TypeError, AttributeError, ValueError, OverflowError):
-                raise TradingError("일봉 데이터를 확인할 수 없습니다.") from None
-            result["fetchedAt"] = now
-            if len(self._charts) >= 32:
-                self._charts.pop(next(iter(self._charts)))
-            self._charts[symbol] = (broker, now, result)
-            return result
+                result = cached[2]
+            else:
+                try:
+                    result = chart_summary(broker.get_daily_candles(target), target)
+                except (KeyError, TypeError, AttributeError, ValueError, OverflowError):
+                    raise TradingError(f"{target} 일봉 데이터를 확인할 수 없습니다.") from None
+                result["fetchedAt"] = now
+                if len(self._charts) >= 32:
+                    self._charts.pop(next(iter(self._charts)))
+                self._charts[target] = (broker, now, result)
+            # Cache candles by their actual ticker; selection metadata is per request.
+            return {**result, "selectedSymbol": symbol, "basis": basis, "underlying": underlying}

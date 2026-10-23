@@ -116,6 +116,29 @@ preview = service.preview_batch(
 
 `FractionalTradeService(broker, settings, store, interval=0.5)`로 브로커·저장소를 주입할 수 있습니다. `start_batch(background=True)` 기본값은 백그라운드 스레드이므로 호출한 프로세스를 유지해야 합니다. CLI는 `background=False`, HTTP 서버는 `True`를 사용합니다. 같은 계좌를 여러 프로세스에서 다루면 동일한 `TOSS_DATA_DIR`을 지정해 중복 방지 상태를 공유하세요. 다른 프로그램이 보내는 주문까지 조율하지는 않습니다.
 
+## 이동평균의 원본 종목 연결
+
+이동평균 카드의 기본 **원본 종목 (자동)** 설정은 GOOW를 선택했을 때 GOOGL(알파벳 A)의 수정 일봉과 20·60·120·200일 평균을 보여줍니다. `선택 GOOW → 지표 GOOGL` 표시로 계산 대상을 구분합니다. 가격 차이도 GOOGL의 최신 일봉과 GOOGL의 평균을 비교하며, 레버리지 배수를 가격에 곱하거나 GOOW 가격과 혼합하지 않습니다. 당일 봉은 변동할 수 있고, 이력이 부족한 기간은 ‘자료 부족’으로 표시합니다.
+
+ETF 자체 지표는 **선택 종목**으로 전환하면 확인할 수 있습니다. 이 설정은 브라우저에 저장됩니다. 주문·잔고·뉴스의 선택 종목은 바뀌지 않으며, 자동 매매 신호나 상승·하락 확률을 생성하지 않습니다. 원본 조회 실패 시 ETF 가격으로 자동 대체하지 않습니다.
+
+[운용사 공식 상품 목록](https://www.roundhillinvestments.com/etf/)에서 확인한 단일 주식 연결만 사용합니다(2026-10-24 확인).
+
+| 선택 종목 | 지표 원본 | 선택 종목 | 지표 원본 |
+| --- | --- | --- | --- |
+| GOOW | GOOGL · 알파벳 A | AVGW | AVGO · 브로드컴 |
+| NVDW | NVDA | TSLW | TSLA |
+| AAPW | AAPL | COIW | COIN |
+| PLTW | PLTR | AMZW | AMZN |
+| HOOW | HOOD | METW | META |
+| NFLW | NFLX | AMDW | AMD |
+| MSFW | MSFT | MSTW | MSTR |
+| ARMW | ARM | BABW | BABA |
+| COSW | COST | UBEW | UBER |
+| UNHW | UNH | | |
+
+그 외 종목은 선택 종목 자체 기준입니다. ETHU 등 선물·지수·여러 종목 기반 상품은 임의로 다른 ETF나 주식에 연결하지 않습니다. 연결 추가는 주문 코드와 분리된 `order_ui/research_symbols.py`에서 관리합니다.
+
 ## 명령행
 
 ```powershell
